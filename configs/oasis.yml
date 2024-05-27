@@ -1,0 +1,30 @@
+# data
+name: 'oasis'
+path: '../OASIS'
+crop_x: 160
+crop_y: 144
+crop_z: 192
+
+# network configs
+loss_type: 'ncc'
+down_channels: [32, 64, 128, 128, 256]
+up_channels: [256, 128, 128, 64, 32]
+
+# training configs
+batch_size: 1
+res_levels: 1
+ss_lr: 1e-4
+ss_epochs: 100
+ss_eval_interval: 1
+checkpoints_path: 'checkpoints/oasis.pt'
+logdir: 'logs/oasis.log'
+
+# loss factors
+image_loss_coeff: 1.
+ss_loss_coeff: 1e5
+
+# evaluation configs
+down_factor: 2
+save_evals: True
+save_evals_path: 'evals/oasis'
+eval_logdir: 'logs/oasis.log'

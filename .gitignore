@@ -1,0 +1,8 @@
+__pycache__
+checkpoints
+evals
+tmp/oasis_train_val_test_*
+tmp/candi_train_val_test_*
+tmp/mindboggle_train_val_test_*
+logs
+*.pt
