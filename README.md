@@ -14,6 +14,7 @@ pip install -r requirements.txt
 Both dataset must be placed outside the main directory of the project with names **OASIS** and **CANDI**.
 
 **NOTE** In writing the dataloader for the OASIS dataset we have assumed the data folder structure is as follows:
+
 📦OASIS \
  ┣ 📂OASIS_OAS1_0001_MR1 \
  ┃ ┣ 📜aligned_norm.nii.gz \
