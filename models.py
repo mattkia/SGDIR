@@ -234,5 +234,3 @@ class FlowNet3D(nn.Module):
         grid[:, :, :, :, 2] = (grid[:, :, :, :, 2] - ((d - 1) / 2)) / (d - 1) * 2
         
         return grid
-
-

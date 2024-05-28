@@ -25,7 +25,7 @@ def jacobian_determinant_3d(deformed_grid: torch.Tensor) -> torch.Tensor:
     output grid and returns the percentage of negative values
     
     Args:
-        deformed_grid (torch.Tensor): [B, w, h, d, 3]
+        deformed_grid (torch.Tensor): [B, D, H, W, 3]
 
     Returns:
         torch.Tensor: the percentage of negative determinants
@@ -50,12 +50,12 @@ def jacobian_determinant_3d(deformed_grid: torch.Tensor) -> torch.Tensor:
 
 def normalized_cross_correlation(input_image: torch.Tensor, target_image: torch.Tensor) -> torch.Tensor:
     """
-    Computes the Normalized Cross-Correlation (NCC) coefficient between a batch of input images and
+    Computes the global Normalized Cross-Correlation (NCC) coefficient between a batch of input images and
     a batch of output images
     
     Args:
-        input_image (torch.Tensor): [B, C, h, w]
-        target_image (torch.Tensor): [B, C, h, w]
+        input_image (torch.Tensor): [B, 1, D, H, W]
+        target_image (torch.Tensor): [B, 1, D, H, W]
 
     Returns:
         torch.Tensor: the NCC between the input and target images
@@ -84,6 +84,9 @@ def save_grid(xy: torch.Tensor, xyr: torch.Tensor, save_path: str, num_rows: int
     Args:
         xy (torch.Tensor): generated grids [B, h, w, 2]
         xyr (torch.Tensor): generated reverse grids [B, h, w, 2]
+        save_path (str): the directory where the result is to be saved
+        num_rows (int) - Defaults to 4: the maximum number of rows in the saved image
+        prefix (str) - Defaults to None: the optional prefix to the file name to be saved
     """
     batch_size = xy.size(0)
     
@@ -148,9 +151,21 @@ def save_grid(xy: torch.Tensor, xyr: torch.Tensor, save_path: str, num_rows: int
     
 
 def save_images(fixed_img: torch.Tensor, moving_img: torch.Tensor, 
-                deformed_fixed: torch.Tensor, deformed_moving: torch.Tensor, save_path: str, 
+                warped_fixed: torch.Tensor, warped_moving: torch.Tensor, save_path: str, 
                 show_diff: bool=True, num_rows: int=8, prefix: str=None):
+    """
+    This function is used to save the results of the FlowNet3D in batch form.
     
+    Args:
+        fixed_img (torch.Tensor): batch of fixed images [B, 1, D, H, W]
+        moving_img (torch.Tensor): batch of moving images [B, 1, D, H, W]
+        warped_fixed (torch.Tensor): batch of warped fixed images [B, 1, D, H, W]
+        warped_moving (torch.Tensor): batch of warped moving images [B, 1, D, H, W]
+        save_path (str): the directory where the results are to be saved
+        show_diff (bool) - Defaults to True: if True, the absolute differences of warped and target are saved too
+        num_rows (int) - Defaults to 8: The maximum number of rows of images in a single plot.
+        prefix (str): the optional prefix to the file name to be saved
+    """
     batch_size = fixed_img.size(0)
     
     if batch_size % num_rows == 0:
@@ -174,8 +189,8 @@ def save_images(fixed_img: torch.Tensor, moving_img: torch.Tensor,
         for row in range(width):
             I_ = fixed_img[row].permute(1, 2, 0).cpu().numpy()
             J_ = moving_img[row].permute(1, 2, 0).cpu().numpy()
-            Iw = deformed_fixed[row].permute(1, 2, 0).cpu().numpy()
-            Jw = deformed_moving[row].permute(1, 2, 0).cpu().numpy()
+            Iw = warped_fixed[row].permute(1, 2, 0).cpu().numpy()
+            Jw = warped_moving[row].permute(1, 2, 0).cpu().numpy()
             
             if show_diff:
                 first = J_ - I_ , 'J-I Before Reg'
@@ -243,7 +258,16 @@ def save_images(fixed_img: torch.Tensor, moving_img: torch.Tensor,
 
 def save_warped(warped_img: torch.Tensor, warped_seg: torch.Tensor, 
                 save_path: str, prefix: str=None):
-                
+    """
+    This function receives an image and its segmentation mask and plots them in
+    an overlayed fashion.
+    
+    Args:
+        warped_img (torch.Tensor): the warped image with shape [1, D, H, W]
+        warped_seg (torch.Tensor): the segmentation mask with shape [1, D, H, W]
+        save_path (str): the directory in which the results is to be saved
+        prefix (str): an optional prefix to the file name
+    """
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
     fontsize = 35
     
@@ -265,6 +289,15 @@ def save_warped(warped_img: torch.Tensor, warped_seg: torch.Tensor,
 
 
 def save_determinant_intensity(deformed_grid: torch.Tensor, save_path: str, prefix: str=None) -> None:
+    """
+    This function receives the deformation grid output by FlowNet3D and plots the
+    determinants of its Jacobian for better analysis.
+    
+    Args:
+        deformed_grid (torch.Tensor): the deformation grid output by FlowNet3D with shape [1, D, H, W, 3]
+        save_path (str): the directory where the plot is saved
+        prefix (str): a prefix to the file name that is to be saved
+    """
     dy = deformed_grid[:, 1:, :-1, :-1, :] - deformed_grid[:, :-1, :-1, :-1, :]
     dx = deformed_grid[:, :-1, 1:, :-1, :] - deformed_grid[:, :-1, :-1, :-1, :]
     dz = deformed_grid[:, :-1, :-1, 1:, :] - deformed_grid[:, :-1, :-1, :-1, :]
@@ -314,6 +347,17 @@ def get_scheduler(optimizer: torch.optim, scheduler_type: str, **kwargs) -> torc
 
 
 def get_dataset(config: Config, train: bool=True, **kwargs):
+    """
+    This function receives the configuration dictionary and returns the dataset
+    specified in the configs along with the determined specifications.
+    
+    Args:
+        config (Config): an instance of the configs
+        train (bool) - Defaults to True: dataset mode (train/val/test)
+        
+    Returns:
+        Dataset: torch friendly dataset of the specified data.
+    """
     name = getattr(config, 'name')
     if name == 'oasis':
         data_path = getattr(config, 'path')
@@ -365,17 +409,17 @@ def get_dataset(config: Config, train: bool=True, **kwargs):
 
 
 def animate_flow_3d(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, 
-                    init_grid: torch.Tensor, down_factor: int, save_path: str, num_frames: int=100, prefix: str=None) -> None:
+                    grid: torch.Tensor, down_factor: int, save_path: str, num_frames: int=100, prefix: str=None) -> None:
     """
-    Receives the PhiNet3d, fixed image, moving image, and a number of steps, and animates the
+    Receives the FlowNet3D, fixed image, moving image, and a number of steps, and animates the
     deformation of the moving image towards the fixed image. Saves the gifs after the 
     animations are created.
     
     Args:
         network (torch.nn.Module): an instanc of the PhiNet
-        fixed_img (torch.Tensor): fixed image [1, c, w, h]
-        moving_image (torch.Tensor): moving image [1, c, w, h]
-        init_grid (torch.Tensor): the initial grid [1, w, h, 2]
+        fixed_img (torch.Tensor): fixed image [1, 1, D, H, W]
+        moving_img (torch.Tensor): moving image [1, 1, D, H, W]
+        grid (torch.Tensor): the initial grid [1, D, H, W, 3]
         save_path (str): the directory in which the gifs will be saved
         num_frames (int) - Defaluts to 100: the number of frames to be generated for the gifs
         prefix (str) - Defaults to None: the prefix added to saved filename
@@ -387,8 +431,8 @@ def animate_flow_3d(network: torch.nn.Module, fixed_img: torch.Tensor, moving_im
     mid_frame_index = fixed_img.size(3) // 2
     
     for index, t in enumerate(timesteps):
-        xyz = network(fixed_img, moving_img, init_grid, t.view(1).to(fixed_img.device))
-        xyzr = network(fixed_img, moving_img, init_grid, -t.view(1).to(fixed_img.device))
+        xyz = network(fixed_img, moving_img, grid, t.view(1).to(fixed_img.device))
+        xyzr = network(fixed_img, moving_img, grid, -t.view(1).to(fixed_img.device))
         
         Jw = F.grid_sample(moving_img, xyz, padding_mode='reflection', align_corners=True)
         Iw = F.grid_sample(fixed_img, xyzr, padding_mode='reflection', align_corners=True)
@@ -470,6 +514,17 @@ def animate_flow_3d(network: torch.nn.Module, fixed_img: torch.Tensor, moving_im
 
 def save_flow_sequence(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, 
                     init_grid: torch.Tensor, save_path: str, num_frames: int=7):
+    """
+    This function stores the temporal warping output by the network in a sequential manner.
+    
+    Args:
+        network (torch.nn.Module): an instance of FlowNet3D by which the inference is done
+        fixed_img (torch.Tensor): the fixed image with shape [1, 1, D, H, W]
+        moving_img (torch.Tensor): the moving image with shape [1, 1, D, H, W]
+        init_grid (torch.Tensor): the initial xyz grid with shape [1, D, H, W, 3]
+        save_path (str): the directory where the results are saved
+        num_frames (int) - Defaults to 7: the number of frames from t=0 to t=1 at which the warpings are calculated
+    """
     # create a temporrary folder which will be removed after the gif is generated
     os.makedirs(f'{save_path}/seq_flow', exist_ok=True)
     
@@ -498,6 +553,8 @@ def dice(seg1: torch.Tensor, seg2: torch.Tensor, grid: torch.Tensor, grid_r: tor
         grid (torch.Tensor): the grid on which the moving image is sampled [B, D, H, W, 3] or [B, H, W, 2]
         gridr (torch.Tensor): the grid on which the fixed image is sampled [B, D, H, W, 3] or [B, H, W, 2]
         bg (bool) - Defaults to False: if False, background is excluded form the computation of the DICE score
+        structured (bool) - Defaults to False: if True, the dice over each structure is calculated, otherwise the
+                                               volumetric dice is computed
     
     Returns:
         Tuple[torch.float32, torch.float32]: the dice score between warped seg1 and seg2 and the dice score
@@ -525,8 +582,10 @@ def dsc_score(seg_map1: torch.Tensor, seg_map2: torch.Tensor, bg: bool=False, st
         seg_map1 (torch.Tensor): [B, C, w, h, d] or [B, C, h, w], first segmentation map
         seg_map2 (torch.Tensor): [B, C, w, h, d] or [B, C, h, w], first segmentation map
         bg (bool) - Defaults to False: consideres background matches if set True
+        structured (bool) - Defaults to False: if True, the dice over each structure is calculated, otherwise the
+                                               volumetric dice is computed
     Returns:
-        torch.Tensor: the dsc score between the two images
+        torch.Tensor: the dice score between the two images
     """
     if not structured:
         max_classes = max(torch.max(seg_map1), torch.max(seg_map2))
@@ -567,30 +626,32 @@ def dsc_score(seg_map1: torch.Tensor, seg_map2: torch.Tensor, bg: bool=False, st
     return dsc_score
 
 
-def rolling_dice(network: torch.nn.Module, fixed: torch.Tensor, moving: torch.Tensor, 
+def rolling_dice(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, 
                  fixed_seg: torch.Tensor, moving_seg: torch.Tensor, 
-                 init_grid: torch.Tensor, save_path: str, num_frames: int=100) -> None:
+                 grid: torch.Tensor, save_path: str, num_frames: int=100) -> None:
     """
-    Receives the PhiNet3d, fixed image, moving image, and a number of steps, and animates the
-    deformation of the moving image towards the fixed image. Saves the gifs after the 
-    animations are created.
+    This functions receives an instance of the FlowNet3D, the fixed and moving images, the
+    fixed and moving segmentations masks, and computes the dice score along the trajectory of warping
+    (i.e., the dice score of warped images at each time step). The results are saved into a 
+    fwd_rolling_dice.txt file
     
     Args:
-        network (torch.nn.Module): an instanc of the PhiNet
-        fixed_img (torch.Tensor): fixed image [1, c, w, h]
-        moving_image (torch.Tensor): moving image [1, c, w, h]
-        init_grid (torch.Tensor): the initial grid [1, w, h, 2]
-        save_path (str): the directory in which the gifs will be saved
-        num_frames (int) - Defaluts to 100: the number of frames to be generated for the gifs
-        prefix (str) - Defaults to None: the prefix added to saved filename
+        network (torch.nn.Module): an instanc of the FlowNet3D
+        fixed_img (torch.Tensor): fixed image [1, 1, D, H, W]
+        moving_img (torch.Tensor): moving image [1, 1, D, H, W]
+        fixed_seg (torch.Tensor): fixed image segmentation mask [1, 1, D, H, W]
+        moving_seg (torch.Tensor): moving image segmentation mask [1, 1, D, H, W]
+        grid (torch.Tensor): the initial grid [1, D, H, W, 3]
+        save_path (str): the directory in which the results will be saved
+        num_frames (int) - Defaluts to 100: the number of time steps at which the dice score should be computed
     """    
     timesteps = torch.linspace(0, 1, num_frames)
 
     f_dice_scores = []
     
-    for index, t in enumerate(timesteps):
-        xyz = network(fixed, moving, init_grid, t.view(1).to(fixed_seg.device))
-        xyzr = network(fixed, moving, init_grid, (t-1).view(1).to(fixed_seg.device))
+    for t in timesteps:
+        xyz = network(fixed_img, moving_img, grid, t.view(1).to(fixed_seg.device))
+        xyzr = network(fixed_img, moving_img, grid, (t-1).view(1).to(fixed_seg.device))
         
         seg_Jw = F.grid_sample(moving_seg, xyz, mode='nearest', align_corners=True, padding_mode='reflection')
         seg_Iw = F.grid_sample(fixed_seg, xyzr, mode='nearest', align_corners=True, padding_mode='reflection')
@@ -599,32 +660,43 @@ def rolling_dice(network: torch.nn.Module, fixed: torch.Tensor, moving: torch.Te
         f_dice_scores.append(f_dice.item())
     
     np.savetxt(f'{save_path}/fwd_rolling_dice.txt', f_dice_scores)
-    # np.savetxt(f'{save_path}/bckwd_rolling_dice.txt', r_dice_scores)
         
 
-def evaluate_semi_group_property(network: nn.Module, I: torch.Tensor, J: torch.Tensor, xyz: torch.Tensor, save_path: str):
-    t = torch.rand(100, device=I.device) * 2. - 1.
-    s = torch.rand(100, device=I.device) * 2. - 1. - t
+def evaluate_semi_group_property(network: nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, grid: torch.Tensor, save_path: str):
+    """
+    This function receives the an instance of FlowNet3D along with the fixed and moving images and evaluates the percentage
+    negative Jacobian determinants and how well the semigroup property holds. 
+    The final results are saved into jacs.tx and errors.txt files which contain the information on Jacobian determinants
+    and the semigroup property errors, respectively.
+    
+    Args:
+        network (torch.nn.Module): an instanc of the FlowNet3D
+        fixed_img (torch.Tensor): fixed image [1, 1, D, H, W]
+        moving_img (torch.Tensor): moving image [1, 1, D, H, W]
+        grid (torch.Tensor): the initial grid [1, D, H, W, 3]
+        save_path (str): the directory in which the results will be saved
+    """
+    t = torch.rand(100, device=fixed_img.device) * 2. - 1.
+    s = torch.rand(100, device=fixed_img.device) * 2. - 1. - t
     prop_errors = np.zeros((100, 100), dtype=np.float32)
     jacs = np.zeros((100,), dtype=np.float32)
     with torch.no_grad():
         for i, t1 in enumerate(t):
             t1 = t1.reshape(1)
-            flow_t = t1 * network.velocity(I, J, t1)
-            grid_t = network.make_grid(flow_t, xyz)
+            flow_t = t1 * network.velocity(fixed_img, moving_img, t1)
+            grid_t = network.make_grid(flow_t, grid)
             jacs[i] = jacobian_determinant_3d(grid_t)
             for j, t2 in enumerate(s):
                 t2 = t2.reshape(1)
-                flow_s = t2 * network.velocity(I, J, t2)
-                composed_flow = network.compose(flow_t, flow_s, xyz)
-                grid = network.make_grid(composed_flow, xyz)
-                new_flow = (t1 + t2) * network.velocity(I, J, t1 + t2)
-                new_grid = network.make_grid(new_flow, xyz)
+                flow_s = t2 * network.velocity(fixed_img, moving_img, t2)
+                composed_flow = network.compose(flow_t, flow_s, grid)
+                grid = network.make_grid(composed_flow, grid)
+                new_flow = (t1 + t2) * network.velocity(fixed_img, moving_img, t1 + t2)
+                new_grid = network.make_grid(new_flow, grid)
                 prop_errors[i, j] = torch.mean((grid - new_grid) ** 2).cpu().numpy()
     
     np.savetxt(f'{save_path}/errors.txt', prop_errors)
     np.savetxt(f'{save_path}/jacs.txt', jacs)
-    return prop_errors
 
 
 class SSIM3d(nn.Module):
