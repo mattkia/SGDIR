@@ -1,9 +1,9 @@
 # data
-name: 'oasis'
-path: 'sample_data/OASIS'
+name: 'lpba40'
+path: '../LPBA40'
 crop_x: 160
-crop_y: 144
-crop_z: 192
+crop_y: 192
+crop_z: 144
 
 # network configs
 loss_type: 'ncc'
@@ -18,15 +18,15 @@ res_levels: 8
 ss_lr: 1e-4
 ss_epochs: 500
 ss_eval_interval: 1
-checkpoints_path: 'checkpoints/oasis.pt'
-logdir: 'logs/oasis.log'
+checkpoints_path: 'checkpoints/lpba.pt'
+logdir: 'logs/lpba.log'
 
 # loss factors
 image_loss_coeff: 1.
-ss_loss_coeff: 1e5
+ss_loss_coeff: 5e4
 
 # evaluation configs
 down_factor: 2
 save_evals: true
-save_evals_path: 'evals/oasis'
-eval_logdir: 'logs/oasis.log'
+save_evals_path: 'evals/lpba'
+eval_logdir: 'logs/lpba.log'

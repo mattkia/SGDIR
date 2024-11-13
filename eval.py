@@ -44,6 +44,8 @@ down_factor = int(getattr(config, 'down_factor'))
 
 down_channels = getattr(config, 'down_channels') if hasattr(config, 'down_channels') else [64, 128, 256, 512]
 up_channels = getattr(config, 'up_channels') if hasattr(config, 'up_channels') else [512, 256, 128, 64]
+time_emb_dim = int(getattr(config, 'time_emb_dim')) if hasattr(config, 'time_emb_dim') else 64
+decoder_only = getattr(config, 'decoder_only') if hasattr(config, 'decoder_only') else True
 
 # creating required directories
 os.makedirs(save_evals_path, exist_ok=True)
@@ -62,7 +64,9 @@ loader = DataLoader(dataset, batch_size=batch_size)
 
 # loading the model
 network = FlowNet3D(down_channels=down_channels, 
-                    up_channels=up_channels).to(device)
+                    up_channels=up_channels, 
+                    time_emb_dim=time_emb_dim, 
+                    decoder_only=decoder_only).to(device)
 network.load_state_dict(weights)
 
 ssim = SSIM3d()

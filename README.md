@@ -1,5 +1,5 @@
 # Learning Diffeomorphism for Image Registration with Time-Continuous Networks using Semigroup Regularization
-This is the official repository of the SGDIR paper submitted at NeurIPS 2024.
+This is the official repository of the SGDIR paper submitted to IEEE Transactions on Medical Imaging.
 
 ## Installing the dependencies
 This package is written in Python 3.10. To install the dependencies, run the following command
@@ -10,25 +10,16 @@ pip install -r requirements.txt
 ## Datasets
 * **OASIS dataset:** [OASIS](https://surfer.nmr.mgh.harvard.edu/ftp/data/neurite/data/)
 * **CANDI dataset:** [CANDI](https://www.nitrc.org/projects/candi_share)
+* **LPBA40 dataset:** [LPBA40](https://www.loni.usc.edu/research/atlas_downloads)
 
-Both dataset must be placed outside the main directory of the project with names **OASIS** and **CANDI**.
+You must specify the path to the dataset inside the config file associated to each dataset.
 
 **NOTE** In writing the dataloader for the OASIS dataset we have assumed the data folder structure is as follows:
 
 📦OASIS \
  ┣ 📂OASIS_OAS1_0001_MR1 \
  ┃ ┣ 📜aligned_norm.nii.gz \
- ┃ ┣ 📜aligned_orig.nii.gz \
- ┃ ┣ 📜aligned_seg35.nii.gz \
- ┃ ┣ 📜aligned_seg4.nii.gz \
- ┃ ┣ 📜norm.nii.gz \
- ┃ ┣ 📜orig.nii.gz \
- ┃ ┣ 📜seg35.nii.gz \
- ┃ ┣ 📜seg4.nii.gz \
- ┃ ┣ 📜slice_norm.nii.gz \
- ┃ ┣ 📜slice_orig.nii.gz \
- ┃ ┣ 📜slice_seg24.nii.gz \
- ┃ ┗ 📜slice_seg4.nii.gz \
+ ┃ ┗ 📜aligned_seg35.nii.gz \
  ┣ 📂OASIS_OAS1_0002_MR1 \
  ┣ 📂OASIS_OAS1_0003_MR1 \
  ┣ 📂OASIS_OAS1_0004_MR1 \
@@ -37,7 +28,7 @@ Both dataset must be placed outside the main directory of the project with names
  ┃ . \
  ┗ 📂OASIS_OAS1_0457_MR1
 
-Where each subject has at least the **aligned_norm.nii.gz** (for the MNI 152 1mm normalized image) and **aligned_seg35.nii.gz** (for the segmentation mask with 35 structures). If your file structure or file names are different, you might need to modify the **load_image_pair** method **OASISRegistrationV2** dataloader in [data.py](data.py).
+Where each subject has the **aligned_norm.nii.gz** (for the MNI 152 1mm normalized image) and **aligned_seg35.nii.gz** (for the segmentation mask with 35 structures). If your file structure or file names are different, you might need to modify the **load_image_pair** method of **OASISRegistrationV2** dataloader in [data.py](data.py).
 
 **NOTE** In writing the dataloader for the CANDI dataset we have assumed the data folder structure is as follows:
 
@@ -84,38 +75,48 @@ Where each subject has at least the **aligned_norm.nii.gz** (for the MNI 152 1mm
  ┃ ┃ . \
  ┃ ┃ . 
 
-If your file structure or file names are different, you might need to modify the **load_image_pair** method **CANDIRegistrationV2** dataloader in [data.py](data.py).
+If your file structure or file names are different, you might need to modify the **load_image_pair** method of **CANDIRegistrationV2** dataloader in [data.py](data.py).
 
-The training, validation, and test pairs are stored in 
+**NOTE** In writing the dataloader for the LPBA40 dataset we have assumed the data folder structure is as follows:
+
+📦LPBA40 \
+ ┣ 📂Delineation \
+ ┃ ┣ 📂S01 \
+ ┃ ┃ ┣ 📜S01.delineation.skullstripped.img \
+ ┃ ┃ ┣ 📜S01.delineation.skullstripped.hdr \
+ ┃ ┃ ┣ 📜S01.delineation.structure.label.img \
+ ┃ ┃ ┗ 📜S01.delineation.structure.label.hdr \
+ ┃ ┣ 📂S02 \
+ ┃ ┃ . \
+ ┃ ┃ . \
+ ┃ ┃ . \
+ ┗ ┗ 📂S40
+
+If your file structure or file names are different, you might need to modify the **load_image_pair** method of **LPBA40Registration** dataloader in [data.py](data.py).
+
+The training, validation, and test pair ids are stored in 
 
 📦tmp \
  ┣ 📜candi_train_val_test.json \
+ ┣ 📜lpba_train_val_test.json \
  ┗ 📜oasis_train_val_test.json
 
 If such files do not exist already, the dataloaders inside the [data.py](data.py) will automatically create one. Otherwise, the already existing files are used to retrieve the training, validation, and test pairs.
 
-For the showcase, the file consisting of a single same pair for training, validation, and test pair is included. Feel free to remove the file, and run the program to generate the pairs for the entire dataset, or manually change the file to include the pairs of your desire.
+For the showcase, the file consisting of a single same pair for training, validation, and test pair is included. Feel free to remove the file, and run the program to generate the pairs for the entire dataset, or manually change the file to include the pairs of your choice.
 
 ## Training
-* To train the model on OASIS dataset run the following:
+* To train the model run the following:
 ```
-python train.py -c oasis
-```
-* To train the model on the CANDI dataset run the follwing:
-```
-python train.py -c candi
+python train.py -c oasis | candi | lpba
 ```
 
 **NOTE** Running train or eval file wihtout the option -c sets the OASIS dataset as the default.
 
-**NOTE** You can change some training/validation configurations inside the [OASIS config file](configs/oasis.yml) or [CANDI config file](configs/candi.yml)
+**NOTE** You can change some training/validation configurations and model architecture inside the [OASIS config file](configs/oasis.yml), [CANDI config file](configs/candi.yml), and [LPBA40 config file](configs/lpba.yml)
 
 ## Evaluation
-* To evaluate the model on OASIS dataset run the following:
+* To evaluate the model run the following:
 ```
-python eval.py -c oasis
-```
-* To train the model on the CANDI dataset run the follwing:
-```
-python eval.py -c candi
+python eval.py -c oasis | candi | lpba
 ```

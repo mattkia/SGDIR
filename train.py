@@ -13,11 +13,10 @@ from torch.utils.data import DataLoader
 
 from config import Config
 from models import FlowNet3D
-from utils import get_scheduler
+from utils import SSIM3d
 from utils import get_dataset
 from utils import dice
 from utils import jacobian_determinant_3d
-from utils import SSIM3d
 
 
 parser = argparse.ArgumentParser()
@@ -42,6 +41,8 @@ ss_eval_interval = int(getattr(config, 'ss_eval_interval'))
 loss_type = getattr(config, 'loss_type')
 down_channels = getattr(config, 'down_channels') if hasattr(config, 'down_channels') else [32, 32, 32]
 up_channels = getattr(config, 'up_channels') if hasattr(config, 'up_channels') else [32, 32, 32]
+time_emb_dim = int(getattr(config, 'time_emb_dim')) if hasattr(config, 'time_emb_dim') else 64
+decoder_only = getattr(config, 'decoder_only') if hasattr(config, 'decoder_only') else True
 
 ckpt_path = getattr(config, 'checkpoints_path')
 
@@ -67,7 +68,9 @@ val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size)
 # initializing the network
 network = FlowNet3D(down_channels=down_channels, 
                     up_channels=up_channels, 
-                    loss_type=loss_type).to(device)
+                    time_emb_dim=time_emb_dim, 
+                    loss_type=loss_type, 
+                    decoder_only=decoder_only).to(device)
 
 # setting up the optimizer
 ss_optimizer = optim.Adam(network.parameters(), lr=ss_lr)

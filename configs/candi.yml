@@ -9,10 +9,12 @@ crop_z: 144
 loss_type: 'ncc'
 down_channels: [32, 64, 128, 128, 256]
 up_channels: [256, 128, 128, 64, 32]
+time_emb_dim: 64
+decoder_only: true
 
 # training configs
 batch_size: 1
-res_levels: 1
+res_levels: 4
 ss_lr: 1e-4
 ss_epochs: 100
 ss_eval_interval: 1
@@ -21,10 +23,10 @@ logdir: 'logs/candi.log'
 
 # loss factors
 image_loss_coeff: 1.
-ss_loss_coeff: 8e4
+ss_loss_coeff: 3e4
 
 # evaluation configs
 down_factor: 1
-save_evals: True
+save_evals: true
 save_evals_path: 'evals/candi'
 eval_logdir: 'logs/candi_eval.log'

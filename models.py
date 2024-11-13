@@ -28,10 +28,13 @@ class SinusoidalPositionEmbeddings(nn.Module):
 
 
 class Block3d(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int, up: bool=False):
+    def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int=None, up: bool=False):
         super().__init__()
 
-        self.time_mlp =  nn.Linear(time_emb_dim, out_channels)
+        self.time_emb_dim = time_emb_dim
+
+        if time_emb_dim is not None:
+            self.time_mlp =  nn.Linear(time_emb_dim, out_channels)
 
         if up:
             # up-sampling (decoder part)
@@ -51,13 +54,15 @@ class Block3d(nn.Module):
         # First Conv
         h = self.bnorm1(F.silu(self.conv1(x)))    
         
-        # Time embedding
-        time_emb = self.time_mlp(t)
-        # Extend last 3 dimensions
-        time_emb = time_emb[(..., ) + (None, ) * 3]
-        
-        # Add time channel
-        h = h + time_emb
+        if self.time_emb_dim is not None:
+            # Time embedding
+            time_emb = self.time_mlp(t)
+            # Extend last 3 dimensions
+            time_emb = time_emb[(..., ) + (None, ) * 3]
+            
+            # Add time channel
+            h = h + time_emb
+
         # Second Conv
         h = self.bnorm2(F.silu(self.conv2(h)))
     
@@ -74,7 +79,8 @@ class UNet3d(nn.Module):
     def __init__(self, in_channels: int=1, out_channels: int=1, 
                  down_channels: List|Tuple=(32, 32, 32), 
                  up_channels: List|Tuple=(32, 32, 32), 
-                 time_emb_dim: int=32) -> None:
+                 time_emb_dim: int=32,
+                 decoder_only: bool=True) -> None:
         super().__init__()
     
         # Time embedding
@@ -88,7 +94,10 @@ class UNet3d(nn.Module):
         self.conv0 = nn.Conv3d(in_channels, down_channels[0], 3, padding=1)
 
         # Downsample
-        self.downs = nn.ModuleList([Block3d(down_channels[i], down_channels[i+1], time_emb_dim) for i in range(len(down_channels)-1)])
+        if decoder_only:
+            self.downs = nn.ModuleList([Block3d(down_channels[i], down_channels[i+1], None) for i in range(len(down_channels)-1)])
+        else:
+            self.downs = nn.ModuleList([Block3d(down_channels[i], down_channels[i+1], time_emb_dim) for i in range(len(down_channels)-1)])
 
         # Upsample
         self.ups = nn.ModuleList([Block3d(up_channels[i], up_channels[i+1], time_emb_dim, up=True) for i in range(len(up_channels)-1)])
@@ -123,7 +132,9 @@ class FlowNet3D(nn.Module):
     def __init__(self, 
                  down_channels: List|Tuple=(32, 32, 32),
                  up_channels: List|Tuple=(32, 32, 32), 
-                 loss_type: str='ncc') -> None:
+                 time_emb_dim: int=64, 
+                 loss_type: str='ncc',
+                 decoder_only: bool=True) -> None:
         super().__init__()
 
         self.loss_type = loss_type
@@ -132,7 +143,8 @@ class FlowNet3D(nn.Module):
                           out_channels=3, 
                           down_channels=down_channels, 
                           up_channels=up_channels, 
-                          time_emb_dim=64)
+                          time_emb_dim=time_emb_dim,
+                          decoder_only=decoder_only)
   
     def forward(self, I: torch.Tensor, J: torch.Tensor, xyz: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """

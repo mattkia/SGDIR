@@ -16,6 +16,7 @@ from torchvision.transforms.functional import rgb_to_grayscale
 from config import Config
 from data import OASISRegistrationV2
 from data import CANDIRegistrationV2
+from data import LPBA40Registration
 
 
 
@@ -402,6 +403,28 @@ def get_dataset(config: Config, train: bool=True, **kwargs):
                                       crop_x=crop_x, crop_y=crop_y, crop_z=crop_z, 
                                       mode=mode)
         
+        return dataset
+    elif name == 'lpba40':
+        data_path = getattr(config, 'path')
+        crop_x = getattr(config, 'crop_x')
+        crop_x = int(crop_x) if crop_x is not None else None
+        crop_y = getattr(config, 'crop_y')
+        crop_y = int(crop_y) if crop_y is not None else None
+        crop_z = getattr(config, 'crop_z')
+        crop_z = int(crop_z) if crop_z is not None else None
+        
+        if 'val' in kwargs.keys():
+            if kwargs['val']:
+                mode = 'val'
+        else:
+            if train:
+                mode = 'train'
+            else:
+                mode = 'test'
+        dataset = LPBA40Registration(dataset_path=data_path, 
+                                     crop_x=crop_x, crop_y=crop_y, crop_z=crop_z, 
+                                     mode=mode)
+            
         return dataset
     else:
         raise Exception(f'[!] Dataset {name} does not exist in the set of experiments. '
