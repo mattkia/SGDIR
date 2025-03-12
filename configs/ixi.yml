@@ -1,6 +1,6 @@
 # data
 name: 'ixi'
-path: '../IXI'
+path: 'sample_data/IXI'
 crop_x: 160
 crop_y: 144
 crop_z: 192
