@@ -628,3 +628,180 @@ class LPBA40Registration(Dataset):
         
         return (fixed, moving, xyz, fixed_seg, moving_seg)
 
+
+class IXIRegistration(Dataset):
+    def __init__(self, dataset_path: str, 
+                 crop_x: int=None, crop_y: int=None, crop_z: int=None, 
+                 normalize: bool=True, 
+                 mode: str='train') -> None:
+        
+        super().__init__()
+        
+        self.dataset_path = dataset_path
+        self.normalize = normalize
+        self.mode = mode
+        
+        self.crop_x = crop_x
+        self.crop_y = crop_y
+        self.crop_z = crop_z
+        
+        if os.path.exists('tmp/ixi_train_val_test.json'):
+            # loading the existing information
+            with open('tmp/ixi_train_val_test.json', 'r') as handle:
+                self.fixed_moving_ids = json.load(handle)[mode]
+                    
+        else:
+            subject_ids = os.listdir(dataset_path)
+            
+            lpba_train_test = {}
+            
+            random.shuffle(subject_ids)
+            
+            train_pairs = self.randomized_pairs(subject_ids[:20], 10, 10)
+            val_pairs = self.randomized_pairs(subject_ids[20: 25], 3, 2)
+            test_pairs = self.randomized_pairs(subject_ids[25:], 8, 7)
+            
+            lpba_train_test['train'] = train_pairs
+            lpba_train_test['val'] = val_pairs
+            lpba_train_test['test'] = test_pairs
+            # saving the information for future use
+            os.makedirs('tmp', exist_ok=True)
+            with open('tmp/ixi_train_val_test.json', 'w') as handle:
+                json.dump(lpba_train_test, handle)
+            
+            self.fixed_moving_ids = lpba_train_test[mode]
+    
+    def randomized_pairs(self, ids: List[str], num_moving_imgs: int, num_atlases: int) -> List[Tuple]:
+        """
+        This method receives the ids of all images, along with the nnumber of images to be considered as the 
+        moving image and the number of images to be considered as atlases (or fixed images). The method then
+        randomly samples from the ids and pairs up the ids of the moving images and the fixed/atlas images
+        
+        Args:
+            ids (List[str]): a list of strings containing the ids of the images; e.g., 0001, 0034, 0411
+            num_moving_imgs (int): the number of images to be considered as the moving image
+            num_atlases (int): the number of images to be considered as the atlas or fixed images
+            
+        Returns:
+            List[Tuple]: a list of the form [(f_id1, m_id1), (f_id2, m_id2), ...], where m_id is the id
+                         of the moving image and the f_id is the id of the fixed image
+        """
+        # randomly choose the moving images
+        moving_imgs_ids = random.sample(ids, num_moving_imgs)
+        remained_ids = [i for i in ids if i not in moving_imgs_ids]
+        atlas_ids = random.sample(remained_ids, num_atlases)
+        
+        fixed_moving_ids = list(product(atlas_ids, moving_imgs_ids))
+        
+        return fixed_moving_ids
+    
+    def load_image_pair(self, fixed_id, moving_id, crop_x, crop_y, crop_z):
+
+        # loading the fixed image
+        fixed_img = nib.load(os.path.join(self.dataset_path, f'{fixed_id}/norm.mgz')).get_fdata()
+        fixed_seg = nib.load(os.path.join(self.dataset_path, f'{fixed_id}/aseg.mgz')).get_fdata()
+        
+        # loading the moving image
+        moving_img = nib.load(os.path.join(self.dataset_path, f'{moving_id}/norm.mgz')).get_fdata()
+        moving_seg = nib.load(os.path.join(self.dataset_path, f'{moving_id}/aseg.mgz')).get_fdata()
+        
+        # croppin the image if specified
+        fixed_img, fixed_seg, moving_img, moving_seg = self.__crop([fixed_img, fixed_seg, moving_img, moving_seg], crop_x, crop_y, crop_z)
+        
+        self.d, self.h, self.w = fixed_img.shape
+        
+        return fixed_img, moving_img, fixed_seg, moving_seg
+    
+    def get_grid(self) -> torch.Tensor:
+        """
+        This method constructs an empty 3D grid
+
+        Returns:
+            torch.Tensor: [B, w, h, d, 3] an empty grid.
+        """
+        z, y, x = np.meshgrid(np.arange(0, self.d), 
+                              np.arange(0, self.h), 
+                              np.arange(0, self.w), indexing='ij')
+        
+        
+        return torch.tensor(np.stack([x, y, z], 3), dtype=torch.float32)
+        
+    def __crop(self, imgs_list: List[np.ndarray], crop_x: int, crop_y: int, crop_z: int) -> List[np.ndarray]:
+        """
+        This method receives a list of images (fixed image, fixed segmentation, moving image, moving segmentation) and the
+        cropping information and crops the images along each axis (if specified)
+        
+        Args:
+            imgs_list (List[np.ndarray]): a list containing the 3D images as numpy arrays
+            crop_x (int): the new size of the image along the x direction
+            crop_y (int): the new size of the image along the y direction
+            crop_z (int): the new size of the image along the z direction
+            
+        Returns:
+            List[np.ndarray]: a list of the same images as input but cropped
+        """
+        if crop_x is not None:
+            imgs_list = self.__crop_axis(imgs_list, crop_x, 0)
+            
+        if crop_y is not None:
+            imgs_list = self.__crop_axis(imgs_list, crop_y, 1)
+            
+        if crop_z is not None:
+            imgs_list = self.__crop_axis(imgs_list, crop_z, 2)
+        
+        return imgs_list
+    
+    def __crop_axis(self, imgs_list: List[np.ndarray], crop_size: int, axis: int=0) -> List[np.ndarray]:
+        """
+        This method crops the given list of image along the specified axis.
+        
+        Args:
+            imgs_list (List[np.ndarray]): a list of images to be cropped.
+            crop_size (int): the new size of the image along the given axis.
+            axis (int) - Defaults to 0: the axis along which the cropping should be done (axis must be eiher 0, 1, or 2)
+            
+        Returns:
+            List[np.ndarray]: a list of the same images as the input but cropped along the specified axis
+        """
+        
+        size = imgs_list[0].shape[axis]
+        start = size // 2 - crop_size // 2
+        end = start + crop_size
+        if axis == 0:
+            cropped_list = [img[start: end, :, :] for img in imgs_list]
+        elif axis == 1:
+            cropped_list = [img[:, start: end, :] for img in imgs_list]
+        else:
+            cropped_list = [img[:, :, start: end] for img in imgs_list]
+        
+        return cropped_list
+    
+    def __image_norm(self, img: np.ndarray) -> torch.Tensor:
+        """
+        This method implements a simple min-max normalization on the images
+        """
+        
+        img = (img - img.min()) / (img.max() - img.min())
+        
+        return img
+    
+    def __len__(self):
+        return len(self.fixed_moving_ids)
+    
+    def __getitem__(self, index):
+        fixed_id, moving_id = self.fixed_moving_ids[index]
+        fixed, moving, fixed_seg, moving_seg = self.load_image_pair(fixed_id, moving_id, self.crop_x, self.crop_y, self.crop_z)
+        
+        if self.normalize:
+            fixed = self.__image_norm(fixed)
+            moving = self.__image_norm(moving)
+        
+        fixed = torch.tensor(fixed, dtype=torch.float32).unsqueeze(0)
+        fixed_seg = torch.tensor(fixed_seg, dtype=torch.float32).unsqueeze(0)
+        moving = torch.tensor(moving, dtype=torch.float32).unsqueeze(0)
+        moving_seg = torch.tensor(moving_seg, dtype=torch.float32).unsqueeze(0)
+        
+        xyz = self.get_grid()
+        
+        return (fixed, moving, xyz, fixed_seg, moving_seg)
+

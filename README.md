@@ -1,5 +1,5 @@
 # Learning Diffeomorphism for Image Registration with Time-Continuous Networks using Semigroup Regularization
-This is the official repository of the SGDIR paper submitted to IEEE Transactions on Medical Imaging.
+This is the official repository of the SGDIR paper.
 
 ## Installing the dependencies
 This package is written in Python 3.10. To install the dependencies, run the following command
@@ -108,7 +108,7 @@ For the showcase, the file consisting of a single same pair for training, valida
 ## Training
 * To train the model run the following:
 ```
-python train.py -c oasis | candi | lpba
+python train.py -c oasis | candi | lpba | ixi
 ```
 
 **NOTE** Running train or eval file wihtout the option -c sets the OASIS dataset as the default.
@@ -118,5 +118,5 @@ python train.py -c oasis | candi | lpba
 ## Evaluation
 * To evaluate the model run the following:
 ```
-python eval.py -c oasis | candi | lpba
+python eval.py -c oasis | candi | lpba | ixi
 ```

@@ -16,6 +16,7 @@ from models import FlowNet3D
 from utils import SSIM3d
 from utils import get_dataset
 from utils import dice
+from utils import compute_hd95
 from utils import jacobian_determinant_3d
 
 
@@ -98,6 +99,7 @@ for epoch in ss_iters:
     avg_tf_dice = 0.
     avg_tf_det = 0.
     avg_f_ssim = 0.
+    avg_hd = 0.
     
     for sample in loader:
         if res_levels > 1:
@@ -147,6 +149,8 @@ for epoch in ss_iters:
             avg_f_dice2 += f_dice2 * 100
             avg_f_det += jacobian_determinant_3d(xyz)
             Jw = torch.nn.functional.grid_sample(J_, xyz, padding_mode='reflection', align_corners=True)
+            warped_seg = torch.nn.functional.grid_sample(seg_J, xyz, padding_mode='reflection', mode='nearest', align_corners=True)
+            avg_hd += compute_hd95(seg_I, warped_seg)
             avg_f_ssim += ssim(I_, Jw) * 100
         
     avg_f_dice /= len(val_loader)
@@ -161,7 +165,7 @@ for epoch in ss_iters:
         ss_iters.set_description(f'Loss: {avg_loss:.6f}')
         log = f'Epoch:{epoch}, Image Loss: {avg_img_loss:.6f}, Contraint Loss: {avg_ss_loss*ss_loss_coeff:.6f}, '
         log += f'Avg TF Dice: {avg_tf_dice:.2f}, Avg TF Det: {avg_tf_det:.4f}, '
-        log += f'Avg F Dice: {avg_f_dice:.2f} ({avg_f_dice2:.2f}), Avg F Det: {avg_f_det:.4f}, Avf F SSIM: {avg_f_ssim:.2f}, Elapsed: {elapsed:.2f}m'
+        log += f'Avg F Dice: {avg_f_dice:.2f} ({avg_f_dice2:.2f}), Avg F Det: {avg_f_det:.4f}, Avf F SSIM: {avg_f_ssim:.2f}, Avg HD: {avg_hd:.2f}, Elapsed: {elapsed:.2f}m'
         
         if avg_f_dice2 > best_dice:
             best_dice = avg_f_dice2

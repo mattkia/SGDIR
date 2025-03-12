@@ -1,6 +1,6 @@
 # data
-name: 'lpba40'
-path: '../LPBA40'
+name: 'ixi'
+path: '../IXI'
 crop_x: 160
 crop_y: 144
 crop_z: 192
@@ -18,8 +18,8 @@ res_levels: 8
 ss_lr: 1e-4
 ss_epochs: 500
 ss_eval_interval: 1
-checkpoints_path: 'checkpoints/lpba.pt'
-logdir: 'logs/lpba.log'
+checkpoints_path: 'checkpoints/ixi.pt'
+logdir: 'logs/ixi.log'
 
 # loss factors
 image_loss_coeff: 1.
@@ -28,5 +28,5 @@ ss_loss_coeff: 1e5
 # evaluation configs
 down_factor: 2
 save_evals: true
-save_evals_path: 'evals/lpba'
-eval_logdir: 'logs/lpba_eval.log'
+save_evals_path: 'evals/ixi'
+eval_logdir: 'logs/ixi_eval.log'

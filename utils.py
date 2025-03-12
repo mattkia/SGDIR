@@ -1,6 +1,7 @@
 import os
 import shutil
 import torch
+import scipy.ndimage
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,6 +11,7 @@ import torch.nn as nn
 
 from skimage import io
 from typing import Tuple
+from scipy.spatial import cKDTree
 from matplotlib.collections import LineCollection
 from torchvision.transforms.functional import rgb_to_grayscale
 
@@ -17,6 +19,7 @@ from config import Config
 from data import OASISRegistrationV2
 from data import CANDIRegistrationV2
 from data import LPBA40Registration
+from data import IXIRegistration
 
 
 
@@ -426,6 +429,30 @@ def get_dataset(config: Config, train: bool=True, **kwargs):
                                      mode=mode)
             
         return dataset
+    elif name == 'ixi':
+        data_path = getattr(config, 'path')
+        
+        crop_x = getattr(config, 'crop_x')
+        crop_x = int(crop_x) if crop_x is not None else None
+        crop_y = getattr(config, 'crop_y')
+        crop_y = int(crop_y) if crop_y is not None else None
+        crop_z = getattr(config, 'crop_z')
+        crop_z = int(crop_z) if crop_z is not None else None
+        
+        if 'val' in kwargs.keys():
+            if kwargs['val']:
+                mode = 'val'
+        else:
+            if train:
+                mode = 'train'
+            else:
+                mode = 'test'
+        
+        dataset = IXIRegistration(dataset_path=data_path,
+                                  crop_x=crop_x, crop_y=crop_y, crop_z=crop_z,
+                                  mode=mode)
+        
+        return dataset
     else:
         raise Exception(f'[!] Dataset {name} does not exist in the set of experiments. '
                         f'You need to implement your own data loader')
@@ -647,6 +674,57 @@ def dsc_score(seg_map1: torch.Tensor, seg_map2: torch.Tensor, bg: bool=False, st
             dsc_score += dicem.mean() / batch_size
     
     return dsc_score
+
+
+def compute_hd95(seg1: torch.Tensor, seg2: torch.Tensor, spacing=(1.0, 1.0, 1.0)):
+    """
+    Compute the 95th percentile Hausdorff Distance (HD95) for two segmentation maps.
+
+    Args:
+        seg1 (torch.Tensor): First segmentation map (shape: [D, H, W])
+        seg2 (torch.Tensor): Second segmentation map (shape: [D, H, W])
+        spacing (tuple): Voxel spacing in (Z, Y, X) order
+
+    Returns:
+        float: The HD95 metric
+    """
+    
+    # Convert to numpy
+    seg1_np = seg1[0, 0].cpu().numpy()
+    seg2_np = seg2[0, 0].cpu().numpy()
+
+    labels = np.unique(np.concatenate([np.unique(seg1_np), np.unique(seg2_np)]))
+    labels = labels[labels != 0]  # Remove background
+    
+    hd95_list = []
+
+    for label in labels:
+        mask1 = (seg1_np == label)
+        mask2 = (seg2_np == label)
+
+        surface1 = np.array(np.where(scipy.ndimage.binary_erosion(mask1) ^ mask1)).T
+        surface2 = np.array(np.where(scipy.ndimage.binary_erosion(mask2) ^ mask2)).T
+
+        if len(surface1) == 0 or len(surface2) == 0:
+            continue
+
+        # Apply voxel spacing
+        surface1 = surface1 * np.array(spacing)
+        surface2 = surface2 * np.array(spacing)
+
+        # Use KDTree for nearest neighbor search (efficient distance computation)
+        tree1 = cKDTree(surface1)
+        tree2 = cKDTree(surface2)
+
+        # Compute nearest neighbor distances
+        dist_1_to_2 = tree1.query(surface2, k=1)[0]  # Closest distance from surface2 to surface1
+        dist_2_to_1 = tree2.query(surface1, k=1)[0]  # Closest distance from surface1 to surface2
+
+        # Compute 95th percentile distance
+        hd95_label = max(np.percentile(dist_1_to_2, 95), np.percentile(dist_2_to_1, 95))
+        hd95_list.append(hd95_label)
+
+    return np.mean(hd95_list) if hd95_list else float('nan')
 
 
 def rolling_dice(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, 
