@@ -1,4 +1,14 @@
 # Learning Diffeomorphism for Image Registration with Time-Continuous Networks using Semigroup Regularization
+<p align="center">
+  <img src="assets/warping5.gif" width="300"/>
+  <img src="assets/warping.gif" width="300"/>
+  <img src="assets/warping4.gif" width="300"/>
+  <img src="assets/warping3.gif" width="300"/>
+  <img src="assets/warping2.gif" width="300"/>
+</p>
+<p align="center">
+  <img src="assets/arch.png" width="100%"/>
+</p>
 This is the official repository of the SGDIR paper.
 
 ## Installing the dependencies
