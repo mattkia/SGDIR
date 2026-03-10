@@ -1,3 +1,5 @@
+experiment_name: 'oasis_unet_diffeomorphic'
+
 # data
 data:
   name: 'oasis'
@@ -25,8 +27,8 @@ training:
   lr: 1e-4
   epochs: 1000
   eval_interval: 1
-  checkpoints_path: 'checkpoints/oasis_single.pt'
-  logdir: 'logs/oasis/oasis_single.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/oasis/'
 
 # loss factors
 loss:
@@ -37,5 +39,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/oasis/oasis_single'
-  logdir: 'logs/oasis/oasis_single_eval.log'
+  save_evals_path: 'evals/oasis/'
+  logdir: 'logs/oasis/'

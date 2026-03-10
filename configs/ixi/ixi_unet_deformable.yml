@@ -1,3 +1,5 @@
+experiment_name: 'ixi_unet_deformable'
+
 # data
 data:
   name: 'ixi'

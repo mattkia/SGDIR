@@ -1,3 +1,5 @@
+experiment_name: 'acdc_dit_diffeomorphic'
+
 # data
 data:
   name: 'acdc'

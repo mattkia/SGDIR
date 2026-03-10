@@ -1,3 +1,5 @@
+experiment_name: 'mindboggle_dit_diffeomorphic'
+
 # data
 data:
   name: 'mindboggle'

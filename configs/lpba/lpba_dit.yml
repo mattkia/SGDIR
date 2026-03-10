@@ -1,3 +1,5 @@
+experiment_name: 'lpba_dit_diffeomorphic'
+
 # data
 data:
   name: 'lpba40'

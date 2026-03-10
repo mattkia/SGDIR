@@ -1,3 +1,5 @@
+experiment_name: 'candi_unet_diffeomorphic'
+
 # data
 data:
   name: 'candi'

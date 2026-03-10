@@ -1,3 +1,5 @@
+experiment_name: 'lpba_unet_deformable'
+
 # data
 data:
   name: 'lpba40'

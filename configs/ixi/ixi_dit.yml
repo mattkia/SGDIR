@@ -1,3 +1,5 @@
+experiment_name: 'ixi_dit_diffeomorphic'
+
 # data
 data:
   name: 'ixi'

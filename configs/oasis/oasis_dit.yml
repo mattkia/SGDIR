@@ -1,3 +1,5 @@
+experiment_name: 'oasis_dit_diffeomorphic'
+
 # data
 data:
   name: 'oasis'
