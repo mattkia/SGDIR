@@ -1,0 +1,47 @@
+# data
+data:
+  name: 'lungct'
+  path: '../../Datasets/LungCT'
+  crop_x: null
+  crop_y: null
+  crop_z: null
+
+# network configs
+model:
+  model_type: 'dit'
+  loss_type: 'ngf'
+  architecture:
+    image_size: [96, 96, 104]
+    in_channels: 2
+    out_channels: 3
+    down_channels: [32, 32, 64, 256]
+    use_attention_gates: true
+    use_se_attention: true
+    decoder_time_embed_dim: 128
+    patch_size: 1
+    embed_dim: 1152
+    depth: 12
+    num_heads: 16
+    mlp_ratio: 4.
+
+# training configs
+training:
+  batch_size: 1
+  res_levels: 8
+  lr: 1e-4
+  epochs: 500
+  eval_interval: 1
+  checkpoints_path: 'checkpoints/lungct_dit2.pt'
+  logdir: 'logs/lungct/lungct_dit2.log'
+
+# loss factors
+loss:
+  image_loss_coeff: 1.
+  semigroup_coeff: 1e4
+
+# evaluation configs
+test:
+  down_factor: 2
+  save_evals: true
+  save_evals_path: 'evals/lungct/lungct_dit2'
+  logdir: 'logs/lungct/lungct_dit2_eval.log'

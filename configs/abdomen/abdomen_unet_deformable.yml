@@ -1,0 +1,41 @@
+# data
+data:
+  name: 'abdomen'
+  path: '../../Datasets/AbdomenCTCT'
+  crop_x: 160
+  crop_y: 144
+  crop_z: 192
+
+# network configs
+model:
+  model_type: 'unet'
+  loss_type: 'ngf'
+  architecture:
+    down_channels: [16, 32, 64, 128, 256]
+    up_channels: [256, 128, 64, 32, 16]
+    decoder_only: true
+    use_attention_gates: true
+    use_se_attention: true
+    time_emb_dim: 128
+
+# training configs
+training:
+  batch_size: 1
+  res_levels: 8
+  lr: 1e-4
+  epochs: 1000
+  eval_interval: 1
+  checkpoints_path: 'checkpoints/abdomen2.pt'
+  logdir: 'logs/abdomen/abdomen2.log'
+
+# loss factors
+loss:
+  image_loss_coeff: 1.
+  semigroup_coeff: 5e3
+
+# evaluation configs
+test:
+  down_factor: 2
+  save_evals: true
+  save_evals_path: 'evals/abdomen/abdomen2'
+  logdir: 'logs/abdomen/abdomen2_eval.log'
