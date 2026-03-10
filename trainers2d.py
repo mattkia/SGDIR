@@ -36,12 +36,13 @@ from models.builder import build_model_2d
 
 class DiceTrainer:
     """
-    A trainer where the data segmentation maps are available and
-    the evaluation is done based on the dice score and HD95 metric.
+    A trainer where the data segmentation maps are available for evaluation
     """
     def __init__(self, config: Dict):
-        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+        experiment_name = config.get('experiment_name')
+        
         data_config = config.get('data')
         model_config = config.get('model')
         training_config = config.get('training')
@@ -54,14 +55,17 @@ class DiceTrainer:
         self.epochs = training_config.get('epochs', 500)
         self.eval_interval = training_config.get('eval_interval', 1)
         self.ckpt_path = training_config.get('checkpoints_path')
+        self.logdir = training_config.get('logdir')
 
         # creating required directories
-        os.makedirs('checkpoints', exist_ok=True)
-        os.makedirs('logs', exist_ok=True)
+        os.makedirs(self.ckpt_path, exist_ok=True)
+        self.ckpt_path = os.path.join(self.ckpt_path, experiment_name + '.pt')
+
+        os.makedirs(self.logdir, exist_ok=True)
+        self.logdir = os.path.join(self.logdir, experiment_name + '.log')
 
         # defining the logger
-        logdir = training_config.get('logdir')
-        logging.basicConfig(filename=logdir,
+        logging.basicConfig(filename=self.logdir,
                             format='%(asctime)s %(message)s',
                             filemode='w')
         logging.getLogger('matplotlib').setLevel(logging.ERROR)
@@ -93,7 +97,7 @@ class DiceTrainer:
 
         # setting loss factors
         self.image_loss_coeff = float(loss_config.get('image_loss_coeff', 1.))
-        self.ss_loss_coeff = float(loss_config.get('semigroup_coeff'))
+        self.sg_loss_coeff = float(loss_config.get('semigroup_coeff'))
 
         # defining the metrics
         self.hd95 = HD95()
@@ -141,7 +145,7 @@ class DiceTrainer:
                     
                     loss, ss_loss = self.network.loss_flow(fixed, moving, grid, res[level])
                     
-                    total_loss = self.image_loss_coeff * loss + self.ss_loss_coeff * ss_loss
+                    total_loss = self.image_loss_coeff * loss + self.sg_loss_coeff * ss_loss
                     
                     total_loss.backward()
                     self.optimizer.step()
@@ -205,7 +209,7 @@ class DiceTrainer:
             
             if epoch % self.eval_interval == 0 or epoch == self.epochs - 1:
                 iters.set_description(f'Loss: {avg_loss:.6f}')
-                log = f'Epoch:{epoch}, Image Loss: {avg_img_loss:.4f}, Contraint Loss: {avg_ss_loss * self.ss_loss_coeff:.4f}, '
+                log = f'Epoch:{epoch}, Image Loss: {avg_img_loss:.4f}, Contraint Loss: {avg_ss_loss * self.sg_loss_coeff:.4f}, '
                 log += f'Train Dice: {avg_tf_dice:.2f}, Train Det: {avg_tf_det:.4f}, '
                 log += f'Val Dice: {avg_f_dice:.2f} ({avg_f_dice2:.2f}), Val Det: {avg_f_det:.4f}, '
                 log += f'Val SSIM: {avg_f_ssim:.2f}, Val HD: {avg_hd:.2f}, Elapsed: {elapsed:.2f}m'
@@ -220,12 +224,13 @@ class DiceTrainer:
 
 class TRETrainer:
     """
-    A trainer where the data landmarks/keypoints are available and
-    the evaluation is done based on the TRE score.
+    A trainer where the data landmarks/keypoints are available for evaluation
     """
     def __init__(self, config: Dict):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
+        experiment_name = config.get('experiment_name')
+
         data_config = config.get('data')
         model_config = config.get('model')
         training_config = config.get('training')
@@ -238,14 +243,17 @@ class TRETrainer:
         self.epochs = training_config.get('epochs', 500)
         self.eval_interval = training_config.get('eval_interval', 1)
         self.ckpt_path = training_config.get('checkpoints_path')
+        self.logdir = training_config.get('logdir')
 
         # creating required directories
-        os.makedirs('checkpoints', exist_ok=True)
-        os.makedirs('logs', exist_ok=True)
+        os.makedirs(self.ckpt_path, exist_ok=True)
+        self.ckpt_path = os.path.join(self.ckpt_path, experiment_name + '.pt')
+
+        os.makedirs(self.logdir, exist_ok=True)
+        self.logdir = os.path.join(self.logdir, experiment_name + '.log')
 
         # defining the logger
-        logdir = training_config.get('logdir')
-        logging.basicConfig(filename=logdir,
+        logging.basicConfig(filename=self.logdir,
                             format='%(asctime)s %(message)s',
                             filemode='w')
         logging.getLogger('matplotlib').setLevel(logging.ERROR)
@@ -277,7 +285,7 @@ class TRETrainer:
 
         # setting loss factors
         self.image_loss_coeff = float(loss_config.get('image_loss_coeff', 1.))
-        self.ss_loss_coeff = float(loss_config.get('semigroup_coeff'))
+        self.sg_loss_coeff = float(loss_config.get('semigroup_coeff'))
 
         # defining the metrics
         self.tre = TRE()
@@ -321,7 +329,7 @@ class TRETrainer:
                     
                     loss, ss_loss = self.network.loss_flow(fixed, moving, grid, res[level])
                     
-                    total_loss = self.image_loss_coeff * loss + self.ss_loss_coeff * ss_loss
+                    total_loss = self.image_loss_coeff * loss + self.sg_loss_coeff * ss_loss
                     
                     total_loss.backward()
                     self.optimizer.step()
@@ -383,7 +391,7 @@ class TRETrainer:
             
             if epoch % self.eval_interval == 0 or epoch == self.epochs - 1:
                 iters.set_description(f'Loss: {avg_loss:.6f}')
-                log = f'Epoch:{epoch}, Image Loss: {avg_img_loss:.4f}, Contraint Loss: {avg_ss_loss * self.ss_loss_coeff:.4f}, '
+                log = f'Epoch:{epoch}, Image Loss: {avg_img_loss:.4f}, Contraint Loss: {avg_ss_loss * self.sg_loss_coeff:.4f}, '
                 log += f'Train TRE: {avg_tf_tre:.4f}, Train Det: {avg_tf_det:.4f}, '
                 log += f'Val TRE: {avg_f_tre:.4f}, Val Det: {avg_f_det:.4f}, '
                 log += f'Val SSIM: {avg_f_ssim:.2f}, Elapsed: {elapsed:.2f}m'
@@ -398,19 +406,23 @@ class TRETrainer:
 
 class DiceTester:
     def __init__(self, config: Dict):
-        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
+        experiment_name = config.get('experiment_name')
+
         data_config = config.get('data')
         model_config = config.get('model')
         training_config = config.get('training')
         test_config = config.get('test')
 
         self.ckpt_path = training_config.get('checkpoints_path')
+        self.ckpt_path = os.path.join(self.ckpt_path, experiment_name + '.pt')
         self.weights = torch.load(self.ckpt_path,
                                   weights_only=True)
         
         self.save_evals = test_config.get('save_evals', False)
         self.save_evals_path = test_config.get('save_evals_path', '.')
+        self.save_evals_path = os.path.join(self.save_evals_path, experiment_name)
 
         self.batch_size = 1
         self.down_factor = test_config.get('down_factor', 1)
@@ -420,6 +432,7 @@ class DiceTester:
 
         # defining the logger
         logdir = test_config.get('logdir')
+        logdir = os.path.join(logdir, experiment_name + '_evals.log')
         logging.basicConfig(filename=logdir,
                             format='%(asctime)s %(message)s',
                             filemode='w')
@@ -666,19 +679,23 @@ class DiceTester:
 
 class TRETester:
     def __init__(self, config: Dict):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
+        experiment_name = config.get('experiment_name')
+
         data_config = config.get('data')
         model_config = config.get('model')
         training_config = config.get('training')
         test_config = config.get('test')
 
         self.ckpt_path = training_config.get('checkpoints_path')
+        self.ckpt_path = os.path.join(self.ckpt_path, experiment_name + '.pt')
         self.weights = torch.load(self.ckpt_path,
                                   weights_only=True)
         
         self.save_evals = test_config.get('save_evals', False)
         self.save_evals_path = test_config.get('save_evals_path', '.')
+        self.save_evals_path = os.path.join(self.save_evals_path, experiment_name)
 
         self.batch_size = 1
         self.down_factor = test_config.get('down_factor', 1)
@@ -688,6 +705,7 @@ class TRETester:
 
         # defining the logger
         logdir = test_config.get('logdir')
+        logdir = os.path.join(logdir, experiment_name + '_evals.log')
         logging.basicConfig(filename=logdir,
                             format='%(asctime)s %(message)s',
                             filemode='w')
