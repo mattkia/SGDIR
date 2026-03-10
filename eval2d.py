@@ -2,14 +2,14 @@ import yaml
 import torch
 import argparse
 
-from trainers import DiceTester
-from trainers import TRETester
+from trainers2d import DiceTester
+from trainers2d import TRETester
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config',
                     type=str,
-                    default='oasis',
+                    default='acdc_unet',
                     help='JSON file for configuration')
 # parse configs
 args = parser.parse_args()
@@ -19,9 +19,9 @@ torch.cuda.empty_cache()
 with open(f'configs/{args.config}.yml', 'r') as handle:
     config = yaml.safe_load(handle)
 
-if config.get('data')['name'] in ['oasis', 'lpba40', 'ixi', 'candi', 'mindboggle', 'abdomen']:
+if config.get('data')['name'] in ['acdc']:
     tester = DiceTester(config)
-elif config.get('data')['name'] in ['lungct']:
-    tester = TRETester(config)
+else:
+    raise NotImplementedError()
 
 tester.run()
