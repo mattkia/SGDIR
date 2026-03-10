@@ -394,28 +394,54 @@ class SDLogJ(nn.Module):
 
     def forward(self, deformation_grid: torch.Tensor) -> torch.Tensor:
         if len(deformation_grid.size()) == 4:
-            dy = deformation_grid[:, 1:, :-1, :] - deformation_grid[:, :-1, :-1, :]
-            dx = deformation_grid[:, :-1, 1:, :] - deformation_grid[:, :-1, :-1, :]
-
-            determinants = dx[..., 0] * dy[..., 1] - dx[..., 1] * dy[..., 0]
+            return self.compute_sdlogj_2d(deformation_grid)
         elif len(deformation_grid.size()) == 5:
-            dy = deformation_grid[:, 1:, :-1, :-1, :] - deformation_grid[:, :-1, :-1, :-1, :]
-            dx = deformation_grid[:, :-1, 1:, :-1, :] - deformation_grid[:, :-1, :-1, :-1, :]
-            dz = deformation_grid[:, :-1, :-1, 1:, :] - deformation_grid[:, :-1, :-1, :-1, :]
+            return self.compute_sdlogj(deformation_grid)
 
-            det0 = dx[:, :, :, :, 0] * (dy[:, :, :, :, 1] * dz[:, :, :, :, 2] - dy[:, :, :, :, 2] * dz[:, :, :, :, 1])
-            det1 = dx[:, :, :, :, 1] * (dy[:, :, :, :, 0] * dz[:, :, :, :, 2] - dy [:, :, :,:, 2] * dz[:, :, :, :, 0])
-            det2 = dx[:, :, :, :, 2] * (dy[:, :, :, :, 0] * dz[:, :, :, :, 1] - dy [:, :, :,:, 1] * dz[:, :, :, :, 0])
+    def compute_sdlogj(self, grid):
+        """
+        Args:
+            grid: (B, D, H, W, 3) deformation grid
+        """
+        # 1. Spatial gradients
+        # Use central differences along Depth (d), Height (h), and Width (w)
+        dd = (grid[:, 2:, 1:-1, 1:-1, :] - grid[:, :-2, 1:-1, 1:-1, :]) / 2.0
+        dh = (grid[:, 1:-1, 2:, 1:-1, :] - grid[:, 1:-1, :-2, 1:-1, :]) / 2.0
+        dw = (grid[:, 1:-1, 1:-1, 2:, :] - grid[:, 1:-1, 1:-1, :-2, :]) / 2.0
 
-            determinants = det0 - det1 + det2
+        # 2. Jacobian components
+        # row 1: grad of x-coord; row 2: grad of y-coord; row 3: grad of z-coord
+        J11 = dd[..., 0]; J12 = dh[..., 0]; J13 = dw[..., 0]
+        J21 = dd[..., 1]; J22 = dh[..., 1]; J23 = dw[..., 1]
+        J31 = dd[..., 2]; J32 = dh[..., 2]; J33 = dw[..., 2]
 
-        # remove boundary artifacts
-        valid = determinants > self.eps
-        if valid.sum() == 0:
-            return torch.zeros((), device=deformation_grid.device)
+        # 3. Determinant
+        det = J11 * (J22 * J33 - J23 * J32) - \
+            J12 * (J21 * J33 - J23 * J31) + \
+            J13 * (J21 * J32 - J22 * J31)
 
-        logJ = torch.log(determinants[valid])
-        return logJ.std()
+        return torch.std(torch.log(det.clamp(min=1e-9)))
+    
+    def compute_sdlogj_2d(self, grid):
+        """
+        Args:
+            grid: (B, H, W, 2) deformation grid
+        """
+        # 1. Compute gradients of the grid coordinates
+        # Grid is [B, H, W, 2] -> grid[..., 0] is x-coords, grid[..., 1] is y-coords
+        # Gradient w.r.t x (width)
+        dx = (grid[:, 1:-1, 2:, :] - grid[:, 1:-1, :-2, :]) / 2.0
+        # Gradient w.r.t y (height)
+        dy = (grid[:, 2:, 1:-1, :] - grid[:, :-2, 1:-1, :]) / 2.0
+
+        # 2. Extract Jacobian components
+        # J = [[dx/dx, dx/dy], [dy/dx, dy/dy]]
+        J11 = dx[..., 0]; J12 = dy[..., 0]
+        J21 = dx[..., 1]; J22 = dy[..., 1]
+
+        # 3. Determinant and SDLogJ
+        det = J11 * J22 - J12 * J21
+        return torch.std(torch.log(det.clamp(min=1e-9)))
 
 
 class NCCLoss(nn.Module):
