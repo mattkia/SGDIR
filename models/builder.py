@@ -1,4 +1,5 @@
-from typing import Dict
+"""Implementations of model builders used in trainers
+"""
 
 from models.layers import UNet3D
 from models.layers import UNet2D
@@ -11,7 +12,17 @@ from models.models import SGDIRDiT
 from models.models import SGDIRDiT2D
 
 
-def build_model(config: Dict) -> SGDIR | SGDIRDiT:
+def build_model(config: dict) -> SGDIR | SGDIRDiT:
+    """Construct an instance of 3D SGDIR or SGDIRDiT
+
+    :param config:
+        A dictionary specifying the architecture of the backbone;
+        examples can be seen in architecture field of the config
+        files
+
+    :returns:
+        An instance of 3D SGDIR or SGDIRDiT
+    """
     model_type = config.get('model_type')
     loss_type = config.get('loss_type', 'ncc')
     architecture_configs = config.get('architecture')
@@ -26,13 +37,23 @@ def build_model(config: Dict) -> SGDIR | SGDIRDiT:
 
     
     if model_type == 'dit':
-        flownet = SGDIRDiT(backbone=backbone, loss_type=loss_type)
+        sgdir = SGDIRDiT(backbone=backbone, loss_type=loss_type)
     else:
-        flownet = SGDIR(backbone=backbone, loss_type=loss_type)
+        sgdir = SGDIR(backbone=backbone, loss_type=loss_type)
 
-    return flownet
+    return sgdir
 
-def build_model_2d(config: Dict) -> SGDIR | SGDIRDiT:
+def build_model_2d(config: dict) -> SGDIR | SGDIRDiT:
+    """Construct an instance of 2D SGDIR or SGDIRDiT
+
+    :param config:
+        A dictionary specifying the architecture of the backbone;
+        examples can be seen in architecture field of the config
+        files
+
+    :returns:
+        An instance of 2D SGDIR or SGDIRDiT
+    """
     model_type = config.get('model_type')
     loss_type = config.get('loss_type', 'ncc')
     architecture_configs = config.get('architecture')
@@ -46,8 +67,8 @@ def build_model_2d(config: Dict) -> SGDIR | SGDIRDiT:
 
     
     if model_type == 'dit':
-        flownet = SGDIRDiT2D(backbone=backbone, loss_type=loss_type)
+        sgdir = SGDIRDiT2D(backbone=backbone, loss_type=loss_type)
     else:
-        flownet = SGDIR2D(backbone=backbone, loss_type=loss_type)
+        sgdir = SGDIR2D(backbone=backbone, loss_type=loss_type)
 
-    return flownet
+    return sgdir

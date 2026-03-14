@@ -1,139 +1,251 @@
+"""Constructions of 2D and 3D SGDIR and SGDIRDiT given different backbones
+"""
+
 import torch
 
 import torch.nn as nn
 import torch.nn.functional as F
-
-from typing import Tuple
 
 from metrics import NCCLoss
 from metrics import NGFLoss
 
 
 class SGDIR(nn.Module):
+    """Implementation of main 3D SGDIR with UNet-based backbone
     """
-    Implementation of both Time-Independet and Time-Dependent Phi network based on interpolative cmposition
-    """
-    def __init__(self, 
-                 backbone: nn.Module, 
-                 loss_type: str='ncc') -> None:
+    def __init__(
+        self,
+        backbone: nn.Module,
+        loss_type: str='ncc'
+    ) -> None:
+        """
+        :param backbone: 
+            An instance of UNet3D
+
+        :param loss_type:
+            The loss function to be used
+            Available loss functions: 'ncc', 'nfg', 'mse'
+        """
         super().__init__()
 
         self.loss_type = loss_type
-        self.ncc_loss = NCCLoss(win=11)
-        if loss_type == 'ngf':
-            self.ngf_loss = NGFLoss()
+        if loss_type == 'ncc':
+            self.loss_fn = NCCLoss(win=11)
+        elif loss_type == 'ngf':
+            self.loss_fn = NGFLoss()
+        elif loss_type == 'mse':
+            self.loss_fn = nn.MSELoss()
+        else:
+            raise NotImplementedError('The given loss function is not defined!')
 
         self.net = backbone
   
-    def forward(self, fixed: torch.Tensor,
-                moving: torch.Tensor,
-                xyz: torch.Tensor,
-                t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            xyz (torch.Tensor): identity grid with size [B, D, H, W, 3]
-            t (torch.Tensor): sampled time with size [B]
-        Returns:
-            torch.Tensor: the deformation grid at time t with size [B, D, H, W, 3]
-        """
-        flow = t * self.velocity(fixed, moving, t)
+        :param fixed: 
+            Fixed image with size [B, 1, D, H, W]
 
-        phi_t = self.make_grid(flow, xyz)
+        :param moving: 
+            Moving image with size [B, 1, D, H, W]
+
+        :param id_grid: 
+            Identity grid with size [B, D, H, W, 3]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            The deformation grid at time t with size [B, D, H, W, 3]
+        """
+        flow = t * self.flow_core(fixed, moving, t)
+
+        phi_t = self.make_grid(flow, id_grid)
 
         return phi_t
   
-    def velocity(self, fixed: torch.Tensor,
-                 moving: torch.Tensor,
-                 t: torch.Tensor) -> torch.Tensor:
+    def flow_core(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            t (torch.Tensor): sampled time with size [1]
-        Returns:
-            torch.Tensor: the vector field at time t with size [B, 3, D, H, W]
+        :param fixed:
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, D, H, W]
+
+        :param t:
+            Sampled time with size [1]
+
+        :returns:
+            The vector field at time t with size [B, 3, D, H, W]
         """
         u_in = torch.cat([fixed, moving], dim=1)
 
-        velocity = self.net(u_in, t)
+        flow = self.net(u_in, t)
 
-        return velocity
+        return flow
 
-    def loss_flow(self, fixed: torch.Tensor,
-                  moving: torch.Tensor,
-                  xyz: torch.Tensor,
-                  res: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def loss_flow(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        res: float
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            xyz (torch.Tensor): identity grid with size [B, D, H, W, 3]
-            res (float): the resolution at which the ncc loss is computed
-        Returns:
-            torch.Tensor, torch.Tensor: ncc loss, semigroup loss
+        :param fixed:
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, D, H, W]
+
+        :param id_grid:
+            Identity grid with size [B, D, H, W, 3]
+
+        :param res:
+            The resolution at which the similarity loss is computed
+
+        :returns:
+            (Similarity loss, Semigroup loss)
         """
         t = torch.rand(1, device=fixed.device)
 
-        flow_J = t * self.velocity(fixed, moving, t)
-        Jw = self.warp(moving, flow_J, xyz)
+        flow_moving = t * self.flow_core(fixed, moving, t)
+        moving_warped = self.warp(moving, flow_moving, id_grid)
 
-        flow_I = (t - 1.) * self.velocity(fixed, moving, t - 1.)
-        Iw = self.warp(fixed, flow_I, xyz)
+        flow_fixed = (t - 1.) * self.flow_core(fixed, moving, t - 1.)
+        fixed_warped = self.warp(fixed, flow_fixed, id_grid)
 
         if res != 1:
-            Iw = F.interpolate(Iw, scale_factor=res, mode='trilinear')
-            Jw = F.interpolate(Jw, scale_factor=res, mode='trilinear')
+            fixed_warped = F.interpolate(fixed_warped,
+                                         scale_factor=res,
+                                         mode='trilinear')
+            moving_warped = F.interpolate(moving_warped,
+                                          scale_factor=res,
+                                          mode='trilinear')
 
-        if self.loss_type == 'mse':
-            image_loss = res * F.mse_loss(Jw, Iw)
-        elif self.loss_type == 'ngf':
-            image_loss = res * self.ngf_loss(Jw, Iw)
-        else:
-            image_loss = res * self.ncc_loss(Jw, Iw)
+        image_loss = res * self.loss_fn(moving_warped, fixed_warped)
 
-        flow_I_J = self.compose(flow_I, flow_J, xyz)
-        grid_I_J = self.make_grid(flow_I_J, xyz)
-        flow_J_I = self.compose(flow_J, flow_I, xyz)
-        grid_J_I = self.make_grid(flow_J_I, xyz)
-        flow = (2. * t - 1.) * self.velocity(fixed, moving, 2. * t - 1.)
-        grid = self.make_grid(flow, xyz)
+        flow_fixed_moving = self.compose(flow_fixed, flow_moving, id_grid)
+        grid_fixed_moving = self.make_grid(flow_fixed_moving, id_grid)
 
-        flow_loss = 0.5 * (torch.mean((grid - grid_I_J) ** 2) + torch.mean((grid - grid_J_I) ** 2))
+        flow_moving_fixed = self.compose(flow_moving, flow_fixed, id_grid)
+        grid_moving_fixed = self.make_grid(flow_moving_fixed, id_grid)
+
+        flow = (2. * t - 1.) * self.flow_core(fixed, moving, 2. * t - 1.)
+        grid = self.make_grid(flow, id_grid)
+
+        flow_loss = 0.5 * (torch.mean((grid - grid_fixed_moving) ** 2) +
+                           torch.mean((grid - grid_moving_fixed) ** 2))
 
         return image_loss, flow_loss
   
-    def make_grid(self, flow: torch.Tensor,
-                  grid: torch.Tensor) -> torch.Tensor:
+    def make_grid(
+        self,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Applies a displacement field to an unnormalized grid
+
+        :param flow:
+            A displacement field with shape [B, 3, D, H, W]
+        
+        :param grid:
+            An unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The [-1, 1] normalized deformation grid obtained from the flow
+            Shape will be [B, D, H, W, 3]
+        """
         phi = grid + flow.permute(0, 2, 3, 4, 1)
 
         phi = self.grid_normalizer(phi)
 
         return phi
   
-    def warp(self, image: torch.Tensor,
-             flow: torch.Tensor,
-             grid: torch.Tensor) -> torch.Tensor:
+    def warp(
+        self,
+        image: torch.Tensor,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Warping operation based on a displacement field
+        and an unnormalized grid
+
+        :param image:
+            The input image with shape [B, 1, D, H, W]
+        
+        :param flow:
+            The displacement field with shape [B, 3, D, H, W]
+
+        :param grid:
+            The unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The warped image with shape [B, 1, D, H, W]
+        """
         grid = grid + flow.permute(0, 2, 3, 4, 1)
         grid = self.grid_normalizer(grid)
 
-        warped = F.grid_sample(image, grid, padding_mode='reflection', align_corners=True)
+        warped = F.grid_sample(image,
+                               grid,
+                               padding_mode='reflection',
+                               align_corners=True)
 
         return warped
 
-    def compose(self, flow1: torch.Tensor,
-                flow2: torch.Tensor,
-                grid: torch.Tensor):
+    def compose(
+        self,
+        flow1: torch.Tensor,
+        flow2: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Implements the flow compostion: flow_1 o flow_2
+
+        :param flow_1:
+            The first flow with shape [B, 3, D, H, W]
+
+        :param flow_2:
+            The second flow with shape [B, 3, D, H, W]
+
+        :param grid:
+            The grid on which flow_2 acts with shape [B, D, H, W, 3]
+
+        :returns:
+            The composed flow_1 o flow_2 with shape [B, 3, D, H, W]
+        """
         grid = grid + flow2.permute(0, 2, 3, 4, 1)
 
         grid = self.grid_normalizer(grid)
 
-        composed_flow = F.grid_sample(flow1, grid, padding_mode='reflection', align_corners=True) + flow2
+        composed_flow = F.grid_sample(flow1,
+                                      grid,
+                                      padding_mode='reflection',
+                                      align_corners=True) + flow2
 
         return composed_flow
   
-    def grid_normalizer(self, grid: torch.Tensor) -> torch.Tensor:
+    def grid_normalizer(
+        self,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Normalizes an unnormalized grid into [-1, 1] range
+
+        :param grid:
+            The unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The [-1, 1] normalized grid with shape [B, D, H, W, 3]
+        """
         _, d, h, w, _ = grid.size()
 
         grid[:, :, :, :, 0] = (grid[:, :, :, :, 0] - ((w - 1) / 2)) / (w - 1) * 2
@@ -144,126 +256,241 @@ class SGDIR(nn.Module):
 
 
 class SGDIR2D(nn.Module):
+    """Implementation of main 2D SGDIR with UNet-based backbone
     """
-    Implementation of both Time-Independet and Time-Dependent Phi network based on interpolative cmposition
-    """
-    def __init__(self, 
-                 backbone: nn.Module, 
-                 loss_type: str='ncc') -> None:
+    def __init__(
+        self,
+        backbone: nn.Module,
+        loss_type: str='ncc'
+    ) -> None:
+        """
+        :param backbone: 
+            An instance of UNet2D
+
+        :param loss_type:
+            The loss function to be used
+            Available loss functions: 'ncc', 'mse'
+        """
         super().__init__()
 
         self.loss_type = loss_type
-        self.ncc_loss = NCCLoss(win=11)
+        if loss_type == 'ncc':
+            self.loss_fn = NCCLoss(win=11)
+        elif loss_type == 'mse':
+            self.loss_fn = nn.MSELoss()
+        else:
+            raise NotImplementedError('The given loss function is not defined!')
 
         self.net = backbone
   
-    def forward(self, fixed: torch.Tensor,
-                moving: torch.Tensor,
-                xy: torch.Tensor,
-                t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            xyz (torch.Tensor): identity grid with size [B, H, W, 3]
-            t (torch.Tensor): sampled time with size [B]
-        Returns:
-            torch.Tensor: the deformation grid at time t with size [B, H, W, 2]
-        """
-        flow = t * self.velocity(fixed, moving, t)
+        :param fixed: 
+            Fixed image with size [B, 1, H, W]
 
-        phi_t = self.make_grid(flow, xy)
+        :param moving: 
+            Moving image with size [B, 1, H, W]
+
+        :param id_grid: 
+            Identity grid with size [B, H, W, 2]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            The deformation grid at time t with size [B, H, W, 2]
+        """
+        flow = t * self.flow_core(fixed, moving, t)
+
+        phi_t = self.make_grid(flow, id_grid)
 
         return phi_t
   
-    def velocity(self, fixed: torch.Tensor,
-                 moving: torch.Tensor,
-                 t: torch.Tensor) -> torch.Tensor:
+    def flow_core(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            t (torch.Tensor): sampled time with size [1]
-        Returns:
-            torch.Tensor: the vector field at time t with size [B, 2, H, W]
+        :param fixed:
+            Fixed image with size [B, 1, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, H, W]
+
+        :param t:
+            Sampled time with size [1]
+
+        :returns:
+            The vector field at time t with size [B, 2, H, W]
         """
         u_in = torch.cat([fixed, moving], dim=1)
 
-        velocity = self.net(u_in, t)
+        flow = self.net(u_in, t)
 
-        return velocity
+        return flow
 
-    def loss_flow(self, fixed: torch.Tensor,
-                  moving: torch.Tensor,
-                  xyz: torch.Tensor,
-                  res: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def loss_flow(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        res: float
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            xyz (torch.Tensor): identity grid with size [B, H, W, 2]
-            res (float): the resolution at which the ncc loss is computed
-        Returns:
-            torch.Tensor, torch.Tensor: ncc loss, semigroup loss
+        :param fixed:
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, D, H, W]
+
+        :param id_grid:
+            Identity grid with size [B, D, H, W, 3]
+
+        :param res:
+            The resolution at which the similarity loss is computed
+
+        :returns:
+            (Similarity loss, Semigroup loss)
         """
         t = torch.rand(1, device=fixed.device)
 
-        flow_J = t * self.velocity(fixed, moving, t)
-        Jw = self.warp(moving, flow_J, xyz)
+        flow_moving = t * self.flow_core(fixed, moving, t)
+        moving_warped = self.warp(moving, flow_moving, id_grid)
 
-        flow_I = (t - 1.) * self.velocity(fixed, moving, t - 1.)
-        Iw = self.warp(fixed, flow_I, xyz)
+        flow_fixed = (t - 1.) * self.flow_core(fixed, moving, t - 1.)
+        fixed_warped = self.warp(fixed, flow_fixed, id_grid)
 
         if res != 1:
-            Iw = F.interpolate(Iw, scale_factor=res, mode='bilinear', antialias=True)
-            Jw = F.interpolate(Jw, scale_factor=res, mode='bilinear', antialias=True)
+            fixed_warped = F.interpolate(fixed_warped,
+                                         scale_factor=res,
+                                         mode='bilinear',
+                                         antialias=True)
+            moving_warped = F.interpolate(moving_warped,
+                                          scale_factor=res,
+                                          mode='bilinear',
+                                          antialias=True)
 
-        if self.loss_type == 'mse':
-            image_loss = res * F.mse_loss(Jw, Iw)
-        else:
-            image_loss = res * self.ncc_loss(Jw, Iw)
+        image_loss = res * self.loss_fn(moving_warped, fixed_warped)
 
-        flow_I_J = self.compose(flow_I, flow_J, xyz)
-        grid_I_J = self.make_grid(flow_I_J, xyz)
-        flow_J_I = self.compose(flow_J, flow_I, xyz)
-        grid_J_I = self.make_grid(flow_J_I, xyz)
-        flow = (2. * t - 1.) * self.velocity(fixed, moving, 2. * t - 1.)
-        grid = self.make_grid(flow, xyz)
+        flow_fixed_moving = self.compose(flow_fixed, flow_moving, id_grid)
+        grid_fixed_moving = self.make_grid(flow_fixed_moving, id_grid)
 
-        flow_loss = 0.5 * (torch.mean((grid - grid_I_J) ** 2) + torch.mean((grid - grid_J_I) ** 2))
+        flow_moving_fixed = self.compose(flow_moving, flow_fixed, id_grid)
+        grid_moving_fixed = self.make_grid(flow_moving_fixed, id_grid)
+
+        flow = (2. * t - 1.) * self.flow_core(fixed, moving, 2. * t - 1.)
+        grid = self.make_grid(flow, id_grid)
+
+        flow_loss = 0.5 * (torch.mean((grid - grid_fixed_moving) ** 2) +
+                           torch.mean((grid - grid_moving_fixed) ** 2))
 
         return image_loss, flow_loss
   
-    def make_grid(self, flow: torch.Tensor,
-                  grid: torch.Tensor) -> torch.Tensor:
+    def make_grid(
+        self,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Applies a displacement field to an unnormalized grid
+
+        :param flow:
+            A displacement field with shape [B, 2, H, W]
+        
+        :param grid:
+            An unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The [-1, 1] normalized deformation grid obtained from the flow
+            Shape will be [B, H, W, 2]
+        """
         phi = grid + flow.permute(0, 2, 3, 1)
 
         phi = self.grid_normalizer(phi)
 
         return phi
   
-    def warp(self, image: torch.Tensor,
-             flow: torch.Tensor,
-             grid: torch.Tensor) -> torch.Tensor:
+    def warp(
+        self,
+        image: torch.Tensor,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Warping operation based on a displacement field
+        and an unnormalized grid
+
+        :param image:
+            The input image with shape [B, 1, H, W]
+        
+        :param flow:
+            The displacement field with shape [B, 2, H, W]
+
+        :param grid:
+            The unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The warped image with shape [B, 1, H, W]
+        """
         grid = grid + flow.permute(0, 2, 3, 1)
         grid = self.grid_normalizer(grid)
 
-        warped = F.grid_sample(image, grid, padding_mode='reflection', align_corners=True)
+        warped = F.grid_sample(image,
+                               grid,
+                               padding_mode='reflection',
+                               align_corners=True)
 
         return warped
 
-    def compose(self, flow1: torch.Tensor,
-                flow2: torch.Tensor,
-                grid: torch.Tensor):
+    def compose(
+        self,
+        flow1: torch.Tensor,
+        flow2: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Implements the flow compostion: flow_1 o flow_2
+
+        :param flow_1:
+            The first flow with shape [B, 2, H, W]
+
+        :param flow_2:
+            The second flow with shape [B, 2, H, W]
+
+        :param grid:
+            The grid on which flow_2 acts with shape [B, H, W, 2]
+
+        :returns:
+            The composed flow_1 o flow_2 with shape [B, 2, H, W]
+        """
         grid = grid + flow2.permute(0, 2, 3, 1)
 
         grid = self.grid_normalizer(grid)
 
-        composed_flow = F.grid_sample(flow1, grid, padding_mode='reflection', align_corners=True) + flow2
+        composed_flow = F.grid_sample(flow1,
+                                      grid,
+                                      padding_mode='reflection',
+                                      align_corners=True) + flow2
 
         return composed_flow
   
-    def grid_normalizer(self, grid: torch.Tensor) -> torch.Tensor:
+    def grid_normalizer(
+        self,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Normalizes an unnormalized grid into [-1, 1] range
+
+        :param grid:
+            The unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The [-1, 1] normalized grid with shape [B, H, W, 2]
+        """
         _, h, w, _ = grid.size()
 
         grid[:, :, :, 0] = (grid[:, :, :, 0] - ((w - 1) / 2)) / (w - 1) * 2
@@ -273,132 +500,243 @@ class SGDIR2D(nn.Module):
 
 
 class SGDIRDiT(nn.Module):
+    """Implementation of main 3D SGDIRDiT with LatentDiT3D backbone
     """
-    Implementation of both Time-Independet and Time-Dependent Phi network based on interpolative cmposition
-    """
-    def __init__(self, 
-                 backbone: nn.Module, 
-                 loss_type: str='ncc') -> None:
+    def __init__(
+        self, 
+        backbone: nn.Module, 
+        loss_type: str='ncc'
+    ) -> None:
+        """
+        :param backbone: 
+            An instance of LatentDiT3D
+
+        :param loss_type:
+            The loss function to be used
+            Available loss functions: 'ncc', 'ngf', 'mse'
+        """
         super().__init__()
 
         self.loss_type = loss_type
-        self.ncc_loss = NCCLoss(win=11)
-        if loss_type == 'ngf':
-            self.ngf_loss = NGFLoss()
+        if loss_type == 'ncc':
+            self.loss_fn = NCCLoss(win=11)
+        elif loss_type == 'ngf':
+            self.loss_fn = NGFLoss()
+        elif loss_type == 'mse':
+            self.loss_fn = nn.MSELoss()
+        else:
+            raise NotImplementedError('The given loss function is not defined!')
 
         self.net = backbone
   
-    def forward(self, fixed: torch.Tensor,
-                moving: torch.Tensor,
-                xyz: torch.Tensor,
-                t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            xyz (torch.Tensor): identity grid with size [B, D, H, W, 3]
-            t (torch.Tensor): sampled time with size [B]
-        Returns:
-            torch.Tensor: the deformation grid at time t with size [B, D, H, W, 3]
-        """
-        flow = t * self.velocity(fixed, moving, t)
+        :param fixed: 
+            Fixed image with size [B, 1, D, H, W]
 
-        phi_t = self.make_grid(flow, xyz)
+        :param moving: 
+            Moving image with size [B, 1, D, H, W]
+
+        :param id_grid: 
+            Identity grid with size [B, D, H, W, 3]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            The deformation grid at time t with size [B, D, H, W, 3]
+        """
+        flow = t * self.flow_core(fixed, moving, t)
+
+        phi_t = self.make_grid(flow, id_grid)
 
         return phi_t
   
-    def velocity(self, fixed: torch.Tensor,
-                 moving: torch.Tensor,
-                 t: torch.Tensor) -> torch.Tensor:
+    def flow_core(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            t (torch.Tensor): sampled time with size [1]
-        Returns:
-            torch.Tensor: the vector field at time t with size [B, 3, D, H, W]
+        :param fixed:
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, D, H, W]
+
+        :param t:
+            Sampled time with size [1]
+
+        :returns:
+            The vector field at time t with size [B, 3, D, H, W]
         """
         u_in = torch.cat([fixed, moving], dim=1)
 
-        velocity = self.net(u_in, t)
+        flow = self.net(u_in, t)
 
-        return velocity
+        return flow
 
-    def loss_flow(self, fixed: torch.Tensor,
-                  moving: torch.Tensor,
-                  xyz: torch.Tensor,
-                  res: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def loss_flow(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        res: float
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, D, H, W]
-            J (torch.Tensor): moving image with size [B, 1, D, H, W]
-            xyz (torch.Tensor): identity grid with size [B, D, H, W, 3]
-            res (float): the resolution at which the ncc loss is computed
-        Returns:
-            torch.Tensor, torch.Tensor: ncc loss, semigroup loss
+        :param fixed:
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, D, H, W]
+
+        :param id_grid:
+            Identity grid with size [B, D, H, W, 3]
+
+        :param res:
+            The resolution at which the similarity loss is computed
+
+        :returns:
+            (Similarity loss, Semigroup loss)
         """
         t = torch.rand(1, device=fixed.device)
 
-        v1, v2, v3 = self.compute_velocities(fixed, moving, t)
+        v1, v2, v3 = self.compute_flows(fixed, moving, t)
 
-        flow_J = t * v1
-        Jw = self.warp(moving, flow_J, xyz)
+        flow_moving = t * v1
+        moving_warped = self.warp(moving, flow_moving, id_grid)
 
-        flow_I = (t - 1.) * v2
-        Iw = self.warp(fixed, flow_I, xyz)
+        flow_fixed = (t - 1.) * v2
+        fixed_warped = self.warp(fixed, flow_fixed, id_grid)
 
         if res != 1:
-            Iw = F.interpolate(Iw, scale_factor=res, mode='trilinear')
-            Jw = F.interpolate(Jw, scale_factor=res, mode='trilinear')
+            fixed_warped = F.interpolate(fixed_warped,
+                                         scale_factor=res,
+                                         mode='trilinear')
+            moving_warped = F.interpolate(moving_warped,
+                                          scale_factor=res,
+                                          mode='trilinear')
 
-        if self.loss_type == 'mse':
-            image_loss = res * F.mse_loss(Jw, Iw)
-        elif self.loss_type == 'ngf':
-            image_loss = res * (self.ngf_loss(Jw, Iw) + F.mse_loss(Jw, Iw))
-        else:
-            image_loss = res * self.ncc_loss(Jw, Iw)
+        image_loss = res * self.loss_fn(moving_warped, fixed_warped)
 
-        flow_I_J = self.compose(flow_I, flow_J, xyz)
-        grid_I_J = self.make_grid(flow_I_J, xyz)
-        flow_J_I = self.compose(flow_J, flow_I, xyz)
-        grid_J_I = self.make_grid(flow_J_I, xyz)
+        flow_fixed_moving = self.compose(flow_fixed, flow_moving, id_grid)
+        grid_fixed_moving = self.make_grid(flow_fixed_moving, id_grid)
+
+        flow_moving_fixed = self.compose(flow_moving, flow_fixed, id_grid)
+        grid_moving_fixed = self.make_grid(flow_moving_fixed, id_grid)
+
         flow = (2. * t - 1.) * v3
-        grid = self.make_grid(flow, xyz)
+        grid = self.make_grid(flow, id_grid)
 
-        flow_loss = 0.5 * (torch.mean((grid - grid_I_J) ** 2) + torch.mean((grid - grid_J_I) ** 2))
+        flow_loss = 0.5 * (torch.mean((grid - grid_fixed_moving) ** 2) +
+                           torch.mean((grid - grid_moving_fixed) ** 2))
 
         return image_loss, flow_loss
   
-    def make_grid(self, flow: torch.Tensor,
-                  grid: torch.Tensor) -> torch.Tensor:
+    def make_grid(
+        self,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Applies a displacement field to an unnormalized grid
+
+        :param flow:
+            A displacement field with shape [B, 3, D, H, W]
+        
+        :param grid:
+            An unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The [-1, 1] normalized deformation grid obtained from the flow
+            Shape will be [B, D, H, W, 3]
+        """
         phi = grid + flow.permute(0, 2, 3, 4, 1)
 
         phi = self.grid_normalizer(phi)
 
         return phi
   
-    def warp(self, image: torch.Tensor,
-             flow: torch.Tensor,
-             grid: torch.Tensor) -> torch.Tensor:
+    def warp(
+        self,
+        image: torch.Tensor,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Warping operation based on a displacement field
+        and an unnormalized grid
+
+        :param image:
+            The input image with shape [B, 1, D, H, W]
+        
+        :param flow:
+            The displacement field with shape [B, 3, D, H, W]
+
+        :param grid:
+            The unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The warped image with shape [B, 1, D, H, W]
+        """
         grid = grid + flow.permute(0, 2, 3, 4, 1)
         grid = self.grid_normalizer(grid)
 
-        warped = F.grid_sample(image, grid, padding_mode='reflection', align_corners=True)
+        warped = F.grid_sample(image,
+                               grid,
+                               padding_mode='reflection',
+                               align_corners=True)
 
         return warped
 
-    def compose(self, flow1: torch.Tensor,
-                flow2: torch.Tensor,
-                grid: torch.Tensor):
+    def compose(
+        self,
+        flow1: torch.Tensor,
+        flow2: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Implements the flow compostion: flow_1 o flow_2
+
+        :param flow_1:
+            The first flow with shape [B, 3, D, H, W]
+
+        :param flow_2:
+            The second flow with shape [B, 3, D, H, W]
+
+        :param grid:
+            The grid on which flow_2 acts with shape [B, D, H, W, 3]
+
+        :returns:
+            The composed flow_1 o flow_2 with shape [B, 3, D, H, W]
+        """
         grid = grid + flow2.permute(0, 2, 3, 4, 1)
 
         grid = self.grid_normalizer(grid)
 
-        composed_flow = F.grid_sample(flow1, grid, padding_mode='reflection', align_corners=True) + flow2
+        composed_flow = F.grid_sample(flow1,
+                                      grid,
+                                      padding_mode='reflection',
+                                      align_corners=True) + flow2
 
         return composed_flow
   
-    def grid_normalizer(self, grid: torch.Tensor) -> torch.Tensor:
+    def grid_normalizer(
+        self,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Normalizes an unnormalized grid into [-1, 1] range
+
+        :param grid:
+            The unnormalized grid with shape [B, D, H, W, 3]
+
+        :returns:
+            The [-1, 1] normalized grid with shape [B, D, H, W, 3]
+        """
         _, d, h, w, _ = grid.size()
 
         grid[:, :, :, :, 0] = (grid[:, :, :, :, 0] - ((w - 1) / 2)) / (w - 1) * 2
@@ -407,9 +745,26 @@ class SGDIRDiT(nn.Module):
         
         return grid
 
-    def compute_velocities(self, fixed: torch.Tensor,
-                           moving: torch.Tensor,
-                           t: torch.Tensor) -> Tuple[torch.Tensor]:
+    def compute_flows(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> tuple[torch.Tensor]:
+        """Computes the flows at times t, t-1 and 2t-1
+
+        :param fixed: 
+            Fixed image with size [B, 1, D, H, W]
+
+        :param moving: 
+            Moving image with size [B, 1, D, H, W]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            Flows f(t), f(t-1), f(2t-1) each with shape [B, 3, D, H, W]
+        """
         encodings = self.net.encode(torch.cat([fixed, moving], dim=1))
 
         latent_t = self.net.bottleneck(encodings[-1], t)
@@ -432,132 +787,241 @@ class SGDIRDiT(nn.Module):
 
 
 class SGDIRDiT2D(nn.Module):
+    """Implementation of main 2D SGDIRDiT with LatentDiT2D backbone
     """
-    Implementation of both Time-Independet and Time-Dependent Phi network based on interpolative cmposition
-    """
-    def __init__(self, 
-                 backbone: nn.Module, 
-                 loss_type: str='ncc') -> None:
+    def __init__(
+        self, 
+        backbone: nn.Module, 
+        loss_type: str='ncc'
+    ) -> None:
+        """
+        :param backbone: 
+            An instance of LatentDiT2D
+
+        :param loss_type:
+            The loss function to be used
+            Available loss functions: 'ncc', 'mse'
+        """
         super().__init__()
 
         self.loss_type = loss_type
-        self.ncc_loss = NCCLoss(win=11)
-        if loss_type == 'ngf':
-            self.ngf_loss = NGFLoss()
+        if loss_type == 'ncc':
+            self.loss_fn = NCCLoss(win=11)
+        elif loss_type == 'mse':
+            self.loss_fn = nn.MSELoss()
+        else:
+            raise NotImplementedError('The given loss function is not defined!')
 
         self.net = backbone
   
-    def forward(self, fixed: torch.Tensor,
-                moving: torch.Tensor,
-                xy: torch.Tensor,
-                t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            xy (torch.Tensor): identity grid with size [B, H, W, 2]
-            t (torch.Tensor): sampled time with size [B]
-        Returns:
-            torch.Tensor: the deformation grid at time t with size [B, H, W, 2]
-        """
-        flow = t * self.velocity(fixed, moving, t)
+        :param fixed: 
+            Fixed image with size [B, 1, H, W]
 
-        phi_t = self.make_grid(flow, xy)
+        :param moving: 
+            Moving image with size [B, 1, H, W]
+
+        :param id_grid: 
+            Identity grid with size [B, H, W, 2]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            The deformation grid at time t with size [B, H, W, 2]
+        """
+        flow = t * self.flow_core(fixed, moving, t)
+
+        phi_t = self.make_grid(flow, id_grid)
 
         return phi_t
   
-    def velocity(self, fixed: torch.Tensor,
-                 moving: torch.Tensor,
-                 t: torch.Tensor) -> torch.Tensor:
+    def flow_core(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            t (torch.Tensor): sampled time with size [1]
-        Returns:
-            torch.Tensor: the vector field at time t with size [B, 2, H, W]
+        :param fixed:
+            Fixed image with size [B, 1, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, H, W]
+
+        :param t:
+            Sampled time with size [1]
+
+        :returns:
+            The vector field at time t with size [B, 2, H, W]
         """
         u_in = torch.cat([fixed, moving], dim=1)
 
-        velocity = self.net(u_in, t)
+        flow = self.net(u_in, t)
 
-        return velocity
+        return flow
 
-    def loss_flow(self, fixed: torch.Tensor,
-                  moving: torch.Tensor,
-                  xy: torch.Tensor,
-                  res: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def loss_flow(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        id_grid: torch.Tensor,
+        res: float
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Args:
-            I (torch.Tensor): fixed image with size [B, 1, H, W]
-            J (torch.Tensor): moving image with size [B, 1, H, W]
-            xy (torch.Tensor): identity grid with size [B, H, W, 2]
-            res (float): the resolution at which the ncc loss is computed
-        Returns:
-            torch.Tensor, torch.Tensor: ncc loss, semigroup loss
+        :param fixed:
+            Fixed image with size [B, 1, H, W]
+
+        :param moving:
+            Moving image with size [B, 1, H, W]
+
+        :param id_grid:
+            Identity grid with size [B, H, W, 2]
+
+        :param res:
+            The resolution at which the similarity loss is computed
+
+        :returns:
+            (Similarity loss, Semigroup loss)
         """
         t = torch.rand(1, device=fixed.device)
 
-        v1, v2, v3 = self.compute_velocities(fixed, moving, t)
+        v1, v2, v3 = self.compute_flows(fixed, moving, t)
 
-        flow_J = t * v1
-        Jw = self.warp(moving, flow_J, xy)
+        flow_moving = t * v1
+        moving_warped = self.warp(moving, flow_moving, id_grid)
 
-        flow_I = (t - 1.) * v2
-        Iw = self.warp(fixed, flow_I, xy)
+        flow_fixed = (t - 1.) * v2
+        fixed_warped = self.warp(fixed, flow_fixed, id_grid)
 
         if res != 1:
-            Iw = F.interpolate(Iw, scale_factor=res, mode='bilinear')
-            Jw = F.interpolate(Jw, scale_factor=res, mode='bilinear')
+            fixed_warped = F.interpolate(fixed_warped,
+                                         scale_factor=res,
+                                         mode='bilinear')
+            moving_warped = F.interpolate(moving_warped,
+                                          scale_factor=res,
+                                          mode='bilinear')
 
-        if self.loss_type == 'mse':
-            image_loss = res * F.mse_loss(Jw, Iw)
-        elif self.loss_type == 'ngf':
-            image_loss = res * (self.ngf_loss(Jw, Iw) + F.mse_loss(Jw, Iw))
-        else:
-            image_loss = res * self.ncc_loss(Jw, Iw)
+        image_loss = res * self.loss_fn(moving_warped, fixed_warped)
 
-        flow_I_J = self.compose(flow_I, flow_J, xy)
-        grid_I_J = self.make_grid(flow_I_J, xy)
-        flow_J_I = self.compose(flow_J, flow_I, xy)
-        grid_J_I = self.make_grid(flow_J_I, xy)
+        flow_fixed_moving = self.compose(flow_fixed, flow_moving, id_grid)
+        grid_fixed_moving = self.make_grid(flow_fixed_moving, id_grid)
+
+        flow_moving_fixed = self.compose(flow_moving, flow_fixed, id_grid)
+        grid_moving_fixed = self.make_grid(flow_moving_fixed, id_grid)
+
         flow = (2. * t - 1.) * v3
-        grid = self.make_grid(flow, xy)
+        grid = self.make_grid(flow, id_grid)
 
-        flow_loss = 0.5 * (torch.mean((grid - grid_I_J) ** 2) + torch.mean((grid - grid_J_I) ** 2))
+        flow_loss = 0.5 * (torch.mean((grid - grid_fixed_moving) ** 2) +
+                           torch.mean((grid - grid_moving_fixed) ** 2))
 
         return image_loss, flow_loss
   
-    def make_grid(self, flow: torch.Tensor,
-                  grid: torch.Tensor) -> torch.Tensor:
+    def make_grid(
+        self,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Applies a displacement field to an unnormalized grid
+
+        :param flow:
+            A displacement field with shape [B, 2, H, W]
+        
+        :param grid:
+            An unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The [-1, 1] normalized deformation grid obtained from the flow
+            Shape will be [B, H, W, 2]
+        """
         phi = grid + flow.permute(0, 2, 3, 1)
 
         phi = self.grid_normalizer(phi)
 
         return phi
   
-    def warp(self, image: torch.Tensor,
-             flow: torch.Tensor,
-             grid: torch.Tensor) -> torch.Tensor:
+    def warp(
+        self,
+        image: torch.Tensor,
+        flow: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Warping operation based on a displacement field
+        and an unnormalized grid
+
+        :param image:
+            The input image with shape [B, 1, H, W]
+        
+        :param flow:
+            The displacement field with shape [B, 2, H, W]
+
+        :param grid:
+            The unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The warped image with shape [B, 1, H, W]
+        """
         grid = grid + flow.permute(0, 2, 3, 1)
         grid = self.grid_normalizer(grid)
 
-        warped = F.grid_sample(image, grid, padding_mode='reflection', align_corners=True)
+        warped = F.grid_sample(image,
+                               grid,
+                               padding_mode='reflection',
+                               align_corners=True)
 
         return warped
 
-    def compose(self, flow1: torch.Tensor,
-                flow2: torch.Tensor,
-                grid: torch.Tensor):
+    def compose(
+        self,
+        flow1: torch.Tensor,
+        flow2: torch.Tensor,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Implements the flow compostion: flow_1 o flow_2
+
+        :param flow_1:
+            The first flow with shape [B, 2, H, W]
+
+        :param flow_2:
+            The second flow with shape [B, 2, H, W]
+
+        :param grid:
+            The grid on which flow_2 acts with shape [B, H, W, 2]
+
+        :returns:
+            The composed flow_1 o flow_2 with shape [B, 2, H, W]
+        """
         grid = grid + flow2.permute(0, 2, 3, 1)
 
         grid = self.grid_normalizer(grid)
 
-        composed_flow = F.grid_sample(flow1, grid, padding_mode='reflection', align_corners=True) + flow2
+        composed_flow = F.grid_sample(flow1,
+                                      grid,
+                                      padding_mode='reflection',
+                                      align_corners=True) + flow2
 
         return composed_flow
   
-    def grid_normalizer(self, grid: torch.Tensor) -> torch.Tensor:
+    def grid_normalizer(
+        self,
+        grid: torch.Tensor
+    ) -> torch.Tensor:
+        """Normalizes an unnormalized grid into [-1, 1] range
+
+        :param grid:
+            The unnormalized grid with shape [B, H, W, 2]
+
+        :returns:
+            The [-1, 1] normalized grid with shape [B, H, W, 2]
+        """
         _, h, w, _ = grid.size()
 
         grid[:, :, :, 0] = (grid[:, :, :, 0] - ((w - 1) / 2)) / (w - 1) * 2
@@ -565,9 +1029,26 @@ class SGDIRDiT2D(nn.Module):
         
         return grid
 
-    def compute_velocities(self, fixed: torch.Tensor,
-                           moving: torch.Tensor,
-                           t: torch.Tensor) -> Tuple[torch.Tensor]:
+    def compute_flows(
+        self,
+        fixed: torch.Tensor,
+        moving: torch.Tensor,
+        t: torch.Tensor
+    ) -> tuple[torch.Tensor]:
+        """Computes the flows at times t, t-1 and 2t-1
+
+        :param fixed: 
+            Fixed image with size [B, 1, H, W]
+
+        :param moving: 
+            Moving image with size [B, 1, H, W]
+
+        :param t:
+            Sampled time with size [B]
+
+        :returns:
+            Flows f(t), f(t-1), f(2t-1) each with shape [B, 2, H, W]
+        """
         encodings = self.net.encode(torch.cat([fixed, moving], dim=1))
 
         latent_t = self.net.bottleneck(encodings[-1], t)

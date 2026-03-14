@@ -1,9 +1,12 @@
+"""Main file for training 2D SGDIR
+"""
+
 import yaml
 import torch
+import pathlib
 import argparse
 
 from trainers2d import DiceTrainer
-from trainers2d import TRETrainer
 
 
 if __name__ == '__main__':
@@ -17,8 +20,8 @@ if __name__ == '__main__':
 
     # configurations
     torch.cuda.empty_cache()
-
-    with open(f'configs/{args.config}.yml', 'r') as handle:
+    config_path = pathlib.Path('configs') / args.config
+    with open(config_path, 'r') as handle:
         config = yaml.safe_load(handle)
 
     if config.get('data')['name'] in ['acdc']:

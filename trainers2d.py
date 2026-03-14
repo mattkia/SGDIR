@@ -1,3 +1,6 @@
+"""Implementations of 2D trainers and evaluators
+"""
+
 import os
 import time
 import torch
@@ -7,7 +10,6 @@ import numpy as np
 import torch.optim as optim
 
 from tqdm import tqdm
-from typing import Dict
 from tabulate import tabulate
 from torch.utils.data import DataLoader
 
@@ -15,7 +17,7 @@ from metrics import TRE
 from metrics import HD95
 from metrics import Dice
 from metrics import ASSD
-from metrics import SSIM2d
+from metrics import SSIM
 from metrics import NCCLoss
 from metrics import DicePerStructure
 from metrics import JacobianDeterminant
@@ -35,10 +37,13 @@ from models.builder import build_model_2d
 
 
 class DiceTrainer:
+    """A trainer where the data segmentation maps are available for evaluation
     """
-    A trainer where the data segmentation maps are available for evaluation
-    """
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
+        """
+        :param config:
+            The experiment configs.
+        """
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         experiment_name = config.get('experiment_name')
@@ -101,7 +106,7 @@ class DiceTrainer:
 
         # defining the metrics
         self.hd95 = HD95()
-        self.ssim = SSIM2d()
+        self.ssim = SSIM()
         self.dice1 = Dice(structured=True)
         self.dice2 = Dice(structured=False)
         self.jac_det = JacobianDeterminant()
@@ -223,10 +228,13 @@ class DiceTrainer:
 
 
 class TRETrainer:
+    """A trainer where the data landmarks/keypoints are available for evaluation
     """
-    A trainer where the data landmarks/keypoints are available for evaluation
-    """
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
+        """
+        :param config:
+            The experiment configs.
+        """
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
         experiment_name = config.get('experiment_name')
@@ -289,7 +297,7 @@ class TRETrainer:
 
         # defining the metrics
         self.tre = TRE()
-        self.ssim = SSIM2d()
+        self.ssim = SSIM()
         self.jac_det = JacobianDeterminant()
 
     def run(self):
@@ -405,7 +413,11 @@ class TRETrainer:
 
 
 class DiceTester:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
+        """
+        :param config:
+            The experiment configs.
+        """
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
         experiment_name = config.get('experiment_name')
@@ -454,7 +466,7 @@ class DiceTester:
         # defining the metrics
         self.hd95 = HD95()
         self.assd = ASSD()
-        self.ssim = SSIM2d()
+        self.ssim = SSIM()
         self.dice1 = Dice(structured=True)
         self.dice2 = Dice(structured=False)
         self.struct_dice = DicePerStructure()
@@ -678,7 +690,11 @@ class DiceTester:
 
 
 class TRETester:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
+        """
+        :param config:
+            The experiment configs.
+        """
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         
         experiment_name = config.get('experiment_name')
@@ -726,7 +742,7 @@ class TRETester:
 
         # defining the metrics
         self.tre = TRE()
-        self.ssim = SSIM2d()
+        self.ssim = SSIM()
         self.jac_det = JacobianDeterminant()
 
     @torch.no_grad()

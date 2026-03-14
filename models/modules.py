@@ -1,10 +1,15 @@
+"""Implementations of the building blocks of 2d and 3D SGDIR and SGDIRDiT.
+The DiT based modules including patch embedding, modulation, and dit layers
+are mainly inspired by the official DiT repository at
+https://github.com/facebookresearch/DiT
+"""
+
 import math
 import torch
 
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Tuple
 from typing import Union
 from typing import Optional
 from typing import Callable
@@ -13,34 +18,86 @@ from timm.models.vision_transformer import Attention
 
 
 
-def modulate(x: torch.Tensor,
-             shift: torch.Tensor,
-             scale: torch.Tensor) -> torch.Tensor:
+def modulate(
+    x: torch.Tensor,
+    shift: torch.Tensor,
+    scale: torch.Tensor
+) -> torch.Tensor:
+    """Apply affine modulation to a tensor.
+
+    :param x:
+        Base tensor to modulate, typically normalized features of
+        shape [B, N, C] or similar.
+
+    :param shift:
+        Shift vector applied after scaling, shape [B, C].
+
+    :param scale:
+        Scale vector applied multiplicatively, shape [B, C].
+
+    :returns:
+        The modulated tensor of same shape as "x".
+    """
     out = x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
     return out
 
 
 class SinusoidalPositionEmbeddings(nn.Module):
-  def __init__(self, dim: int):
-    super().__init__()
+    """Compute sinusoidal position embeddings for a scalar time input.
 
-    self.dim = dim
+    This module produces the same style of positional encoding used in
+    transformers, but parameterized by a single time variable.
+    """
+    def __init__(
+        self,
+        dim: int
+    ):
+        """
+        :param dim: Dimension of the output embeddings. Must be even.
+        """
+        super().__init__()
 
-  def forward(self, time):
-    device = time.device
-    half_dim = self.dim // 2
-    embeddings = math.log(10000) / (half_dim - 1)
-    embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-    embeddings = time[:, None] * embeddings[None, :]
-    embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        self.dim = dim
 
-    return embeddings
+    def forward(
+        self,
+        time: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param time:
+            Tensor of shape [B] containing scalar time values.
+
+        :returns:
+            Positional embeddings of shape [B, dim].
+        """
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+
+        return embeddings
 
 
 class SEBlock3D(nn.Module):
-    def __init__(self, channels: int,
-                 reduction: int = 8):
+    """3D squeeze-and-excitation block.
+
+    Reweights channel activations by global context.
+    """
+    def __init__(
+        self,
+        channels: int,
+        reduction: int=8
+    ):
+        """
+        :param channels:
+            Number of input/output channels.
+
+        :param reduction:
+            Reduction factor for intermediate hidden size.
+        """
         super().__init__()
 
         hidden = max(channels // reduction, 1)
@@ -53,7 +110,17 @@ class SEBlock3D(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Input tensor of shape [B, C, D, H, W].
+
+        :returns:
+            Reweighted output tensor of same shape.
+        """
         w = self.avg_pool(x)
         w = self.fc(w)
 
@@ -61,8 +128,22 @@ class SEBlock3D(nn.Module):
 
 
 class SEBlock2D(nn.Module):
-    def __init__(self, channels: int,
-                 reduction: int = 8):
+    """2D squeeze-and-excitation block.
+
+    Performs channel-wise reweighting based on global average pooling.
+    """
+    def __init__(
+        self,
+        channels: int,
+        reduction: int=8
+    ):
+        """
+        :param channels:
+            Number of input/output channels.
+
+        :param reduction:
+            Reduction factor for intermediate hidden size.
+        """
         super().__init__()
 
         hidden = max(channels // reduction, 1)
@@ -75,7 +156,17 @@ class SEBlock2D(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Input tensor of shape [B, C, H, W].
+
+        :returns:
+            Tensor of same shape after channel reweighting.
+        """
         w = self.avg_pool(x)
         w = self.fc(w)
 
@@ -83,9 +174,28 @@ class SEBlock2D(nn.Module):
 
 
 class AttentionGate3D(nn.Module):
-    def __init__(self, channels_l: int,
-                 channels_g: int,
-                 inter_channels: int=None):
+    """Spatial attention gate for 3D UNets.
+
+    Computes an attention mask from decoder and encoder features and
+    modulates the encoder skip connection.
+    """
+    def __init__(
+        self,
+        channels_l: int,
+        channels_g: int,
+        inter_channels: int=None
+    ):
+        """
+        :param channels_l:
+            Number of channels in the encoder (lower) features.
+
+        :param channels_g:
+            Number of channels in the decoder (gating) features.
+
+        :param inter_channels:
+            Channels for intermediate computation; defaults
+            to half of channels_l.
+        """
         super().__init__()
 
         if inter_channels is None:
@@ -107,11 +217,20 @@ class AttentionGate3D(nn.Module):
             nn.Sigmoid()
         )
     
-    def forward(self, g: torch.Tensor,
-                l: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        g: torch.Tensor,
+        l: torch.Tensor
+    ) -> torch.Tensor:
         """
-        g: decoded features
-        l: encoder skiped features
+        :param g:
+            Decoder (gating) features tensor.
+
+        :param l:
+            Encoder skip features tensor to modulate.
+
+        :returns:
+            Modulated encoder features of same shape as "l".
         """
 
         attention = self.psi(self.weights_g(g) + self.weights_x(l))
@@ -122,9 +241,24 @@ class AttentionGate3D(nn.Module):
 
 
 class AttentionGate2D(nn.Module):
-    def __init__(self, channels_l: int,
-                 channels_g: int,
-                 inter_channels: int=None):
+    """Spatial attention gate for 2D UNets.
+    """
+    def __init__(
+        self,
+        channels_l: int,
+        channels_g: int,
+        inter_channels: int=None
+    ):
+        """
+        :param channels_l:
+            Number of channels in the encoder (lower) features.
+
+        :param channels_g:
+            Number of channels in the decoder (gating) features.
+
+        :param inter_channels: 
+            Intermediate channels, default half of channels_l.
+        """
         super().__init__()
 
         if inter_channels is None:
@@ -146,11 +280,20 @@ class AttentionGate2D(nn.Module):
             nn.Sigmoid()
         )
     
-    def forward(self, g: torch.Tensor,
-                l: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        g: torch.Tensor,
+        l: torch.Tensor
+    ) -> torch.Tensor:
         """
-        g: decoded features
-        l: encoder skiped features
+        :param g:
+            Decoder (gating) features tensor.
+
+        :param l:
+            Encoder skip features tensor to modulate.
+
+        :returns:
+            Modulated encoder features of same shape as "l".
         """
 
         attention = self.psi(self.weights_g(g) + self.weights_x(l))
@@ -161,10 +304,15 @@ class AttentionGate2D(nn.Module):
 
 
 class PatchEmbed3D(nn.Module):
-    """ 3D Image (volume) to Patch Embedding """
+    """3D image (volume) to patch embedding module.
+
+    Splits a 3D volume into non-overlapping patches followed by a linear
+    projection and optional normalization. Used as the first stage of a
+    DiT3D model.
+    """
     def __init__(
         self,
-        img_size: Union[int, Tuple[int, int, int]]=224,
+        img_size: Union[int, tuple[int, int, int]]=224,
         patch_size: int=16,
         in_chans: int=1,
         embed_dim: int=768,
@@ -174,6 +322,34 @@ class PatchEmbed3D(nn.Module):
         strict_img_size: bool=True,
         dynamic_img_pad: bool=False,
     ):
+        """
+        :param img_size:
+            Input image size [D, H, W] or single integer to repeat.
+
+        :param patch_size:
+            Spatial size of each patch.
+
+        :param in_chans: 
+            Number of input channels.
+
+        :param embed_dim: 
+            Dimension of output embeddings per patch.
+
+        :param norm_layer: 
+            Optional normalization layer constructor.
+
+        :param flatten: 
+            Whether to flatten patches into sequence.
+
+        :param bias: 
+            Whether to include bias in the projection conv.
+
+        :param strict_img_size: 
+            Enforce input image to match img_size.
+
+        :param dynamic_img_pad: 
+            Allow dynamic padding of inputs to patchable size.
+        """
         super().__init__()
         self.patch_size = patch_size
         if isinstance(patch_size, int):
@@ -191,7 +367,18 @@ class PatchEmbed3D(nn.Module):
                               bias=bias)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
-    def _init_img_size(self, img_size: Union[int, Tuple[int, int, int]]):
+    def _init_img_size(
+        self,
+        img_size: Union[int, tuple[int, int, int]]
+    ) -> tuple[tuple[int], tuple[int], int]:
+        """Compute canonical image and patch grid sizes.
+
+        :param img_size:
+            Input image size or scalar.
+
+        :returns:
+            Tuple of (img_size, grid_size, num_patches).
+        """
         if isinstance(img_size, int):
             img_size = (img_size, img_size, img_size)
 
@@ -200,12 +387,36 @@ class PatchEmbed3D(nn.Module):
 
         return img_size, grid_size, num_patches
 
-    def _assert(self, cond, msg):
+    def _assert(
+        self,
+        cond: bool,
+        msg: str
+    ):
+        """Utility assertion raising with a custom message.
+
+        :param cond:
+            Condition to evaluate.
+
+        :param msg:
+            Message included in the exception if cond is False.
+        """
         if not cond:
             raise AssertionError(msg)
 
-    def dynamic_feat_size(self, img_size: Tuple[int, int, int]) -> Tuple[int, int, int]:
-        """Get grid (feature) size for given image size accounting for dynamic padding."""
+    def dynamic_feat_size(
+        self,
+        img_size: tuple[int, int, int]
+    ) -> tuple[int, int, int]:
+        """Compute feature grid size from arbitrary image size.
+
+        Accounts for dynamic_img_pad if enabled.
+
+        :param img_size:
+            Tuple (D, H, W) describing input volume dimensions.
+
+        :returns:
+            Tuple (D_p, H_p, W_p) of patch grid size.
+        """
         if self.dynamic_img_pad:
             return (
                 math.ceil(img_size[0] / self.patch_size[0]),
@@ -219,8 +430,19 @@ class PatchEmbed3D(nn.Module):
                 img_size[2] // self.patch_size[2],
             )
 
-    def forward(self, x):
-        B, C, D, H, W = x.shape
+    def forward(
+        self,
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x: 
+            Input volume tensor of shape [B, C, D, H, W].
+
+        :returns: 
+            Patch embeddings of shape [B, N, embed_dim] (if flatten) or
+            [B, embed_dim, D_p, H_p, W_p].
+        """
+        B, _, D, H, W = x.shape
         if self.img_size is not None:
             if self.strict_img_size:
                 self._assert(D == self.img_size[0], f'Input depth ({D}) doesnt match model ({self.img_size[0]}).')
@@ -254,10 +476,14 @@ class PatchEmbed3D(nn.Module):
 
 
 class PatchEmbed2D(nn.Module):
-    """ 2D Image (volume) to Patch Embedding """
+    """2D image to patch embedding module.
+
+    Similar to PatchEmbed3D but for 2D inputs. Splits an image into patches
+    then projects to embedding vectors.
+    """
     def __init__(
         self,
-        img_size: Union[int, Tuple[int, int]]=224,
+        img_size: Union[int, tuple[int, int]]=224,
         patch_size: int=16,
         in_chans: int=1,
         embed_dim: int=768,
@@ -267,6 +493,35 @@ class PatchEmbed2D(nn.Module):
         strict_img_size: bool=True,
         dynamic_img_pad: bool=False,
     ):
+        """
+        :param img_size:
+            Input image size (H, W) or single integer.
+
+        :param patch_size:
+            Patch spatial size.
+
+        :param in_chans:
+            Number of input channels.
+
+        :param embed_dim:
+            Dimension of each patch embedding.
+
+        :param norm_layer:
+            Optional normalization layer constructor.
+
+        :param flatten:
+            If True outputs [B, N, embed_dim], else
+            [B, embed_dim, H_p, W_p].
+
+        :param bias:
+            Whether to add bias in projection conv.
+
+        :param strict_img_size:
+            Enforce that input size matches img_size.
+
+        :param dynamic_img_pad:
+            Allow padding to make input divisible by patch size.
+        """
         super().__init__()
         self.patch_size = patch_size
         if isinstance(patch_size, int):
@@ -284,7 +539,15 @@ class PatchEmbed2D(nn.Module):
                               bias=bias)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
-    def _init_img_size(self, img_size: Union[int, Tuple[int, int]]):
+    def _init_img_size(
+        self,
+        img_size: Union[int, tuple[int, int]]
+    ) -> tuple[tuple[int], tuple[int], int]:
+        """Compute canonical image and grid sizes for 2D case.
+
+        :param img_size: Input size or scalar.
+        :returns: (img_size, grid_size, num_patches)
+        """
         if isinstance(img_size, int):
             img_size = (img_size, img_size)
 
@@ -293,12 +556,34 @@ class PatchEmbed2D(nn.Module):
 
         return img_size, grid_size, num_patches
 
-    def _assert(self, cond, msg):
+    def _assert(
+        self,
+        cond: bool, 
+        msg: str
+    ):
+        """Utility assertion raising with a custom message.
+
+        :param cond:
+            Condition to evaluate.
+
+        :param msg:
+            Message included in the exception if cond is False.
+        """
         if not cond:
             raise AssertionError(msg)
 
-    def dynamic_feat_size(self, img_size: Tuple[int, int]) -> Tuple[int, int]:
-        """Get grid (feature) size for given image size accounting for dynamic padding."""
+    def dynamic_feat_size(
+        self,
+        img_size: tuple[int, int]
+    ) -> tuple[int, int]:
+        """Compute feature grid size for 2D inputs, accounting for padding.
+
+        :param img_size:
+            Tuple (H, W).
+
+        :returns:
+            Tuple (H_p, W_p) grid size.
+        """
         if self.dynamic_img_pad:
             return (
                 math.ceil(img_size[0] / self.patch_size[0]),
@@ -310,7 +595,18 @@ class PatchEmbed2D(nn.Module):
                 img_size[1] // self.patch_size[1],
             )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Input image tensor of shape [B, C, H, W].
+
+        :returns:
+            Patch embeddings of shape [B, N, embed_dim] (if flatten)
+            or [B, embed_dim, H_p, W_p].
+        """
         B, C, H, W = x.shape
         if self.img_size is not None:
             if self.strict_img_size:
@@ -341,12 +637,41 @@ class PatchEmbed2D(nn.Module):
 
 
 class ConvBlock3D(nn.Module):
-    def __init__(self, in_channels: int,
-                 out_channels: int,
-                 time_emb_dim: int=None,
-                 up: bool=False,
-                 down: bool=True,
-                 use_se: bool=False):
+    """Basic 3D convolutional block used in encoder/decoder stages.
+
+    Can optionally perform up/down sampling and incorporate a time
+    embedding and SE block.
+    """
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        time_emb_dim: int=None,
+        up: bool=False,
+        down: bool=True,
+        use_se: bool=False
+    ):
+        """
+        :param in_channels:
+            Number of input channels.
+
+        :param out_channels:
+            Number of output channels.
+
+        :param time_emb_dim:
+            Dimension of time embedding; if provided, a
+            linear layer is added to modulate features.
+
+        :param up:
+            If True, performs upsampling (decoder block).
+
+        :param down:
+            If True and "up" is False, performs downsampling
+            (encoder block); otherwise keeps spatial size.
+
+        :param use_se:
+            If True, append a squeeze-and-excitation block.
+        """
         super().__init__()
 
         self.time_emb_dim = time_emb_dim
@@ -375,7 +700,22 @@ class ConvBlock3D(nn.Module):
         if use_se:
             self.se_block = SEBlock3D(out_channels)
 
-    def forward(self, x:torch.Tensor, t:torch.Tensor):
+    def forward(
+        self,
+        x:torch.Tensor,
+        t:torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Input tensor of shape [B, C, D, H, W].
+
+        :param t:
+            Time embedding tensor of shape [B, time_emb_dim] (ignored if
+            time_emb_dim is None).
+
+        :returns:
+            Output tensor after convs and optional sampling.
+        """
         # First Conv
         h = self.bnorm1(F.silu(self.conv1(x)))    
         
@@ -401,12 +741,37 @@ class ConvBlock3D(nn.Module):
 
 
 class ConvBlock2D(nn.Module):
-    def __init__(self, in_channels: int,
-                 out_channels: int,
-                 time_emb_dim: int=None,
-                 up: bool=False,
-                 down: bool=True,
-                 use_se: bool=False):
+    """Basic 2D convolutional block with optional time embedding, sampling,
+    and SE.
+    """
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        time_emb_dim: int=None,
+        up: bool=False,
+        down: bool=True,
+        use_se: bool=False
+    ):
+        """
+        :param in_channels:
+            Input channel count.
+
+        :param out_channels:
+            Output channel count.
+
+        :param time_emb_dim:
+            Dimension of time embedding layer.
+
+        :param up:
+            If True, block upsamples by factor 2.
+
+        :param down:
+            If True and "up" is False, block downsamples.
+
+        :param use_se:
+            Whether to include SEBlock2D.
+        """
         super().__init__()
 
         self.time_emb_dim = time_emb_dim
@@ -435,7 +800,21 @@ class ConvBlock2D(nn.Module):
         if use_se:
             self.se_block = SEBlock2D(out_channels)
 
-    def forward(self, x:torch.Tensor, t:torch.Tensor):
+    def forward(
+        self,
+        x:torch.Tensor,
+        t:torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Input tensor [B, C, H, W].
+
+        :param t:
+            Time embedding tensor [B, time_emb_dim] (if used).
+
+        :returns:
+            Output tensor after processing.
+        """
         # First Conv
         h = self.bnorm1(F.silu(self.conv1(x)))    
         
@@ -461,14 +840,27 @@ class ConvBlock2D(nn.Module):
 
 
 class DiTBlock(nn.Module):
+    """A single block from the DiT transformer architecture.
+
+    This implementation is based on the official DiT repository.
     """
-    Codes are largely taken from 
-    https://github.com/facebookresearch/DiT/
-    """
-    def __init__(self, hidden_size: int,
-                 num_heads: int,
-                 mlp_ratio: float=4.,
-                 **block_kwargs):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        mlp_ratio: float=4.,
+        **block_kwargs
+    ):
+        """
+        :param hidden_size:
+            Embedding dimension.
+
+        :param num_heads:
+            Number of attention heads.
+
+        :param mlp_ratio:
+            Ratio to compute hidden size of the MLP.
+        """
         super().__init__()
 
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=True, eps=1e-6)
@@ -488,8 +880,21 @@ class DiTBlock(nn.Module):
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
         )
     
-    def forward(self, x: torch.Tensor,
-                ctx: torch.Tensor)-> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        ctx: torch.Tensor
+    )-> torch.Tensor:
+        """
+        :param x:
+            A patchified tensor of shape [B, N, hidden_size]
+
+        :param ctx:
+            The time context with shape [B, hidden_size]
+
+        :returns:
+            The time-modulated tensor
+        """
         components = self.adaLN_modulation(ctx).chunk(6, dim=1)
 
         shift_msa, scale_msa, gate_msa = components[:3]
@@ -502,9 +907,26 @@ class DiTBlock(nn.Module):
 
 
 class DiTFinalLayer(nn.Module):
-    def __init__(self, hidden_size: int,
-                 patch_size: int,
-                 out_channels: int):
+    """Final projection layer for 3D DiT outputs.
+
+    Maps transformer tokens back to a voxel-space displacement field.
+    """
+    def __init__(
+        self,
+        hidden_size: int,
+        patch_size: int,
+        out_channels: int
+    ):
+        """
+        :param hidden_size:
+            Token embedding dimension.
+
+        :param patch_size:
+            Side length of cubic patch grid.
+
+        :param out_channels:
+            Number of output channels per voxel.
+        """
         super().__init__()
 
         # total_size = grid_size[0] * grid_size[1] * grid_size[2]
@@ -518,8 +940,22 @@ class DiTFinalLayer(nn.Module):
             nn.Linear(hidden_size, 2 * hidden_size, bias=True)
         )
 
-    def forward(self, x: torch.Tensor,
-                ctx: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        ctx: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Token tensor of shape [B, N, hidden_size].
+
+        :param ctx:
+            Context tensor for modulation, shape [B, hidden_size].
+
+        :returns:
+            Output tensor reshaped to [B, N, out_channels] after linear
+            projection (caller may reshape further into spatial grid).
+        """
         shift, scale = self.adaLN_modulation(ctx).chunk(2, dim=1)
 
         x = modulate(self.norm_final(x), shift, scale)
@@ -530,9 +966,23 @@ class DiTFinalLayer(nn.Module):
 
 
 class DiTFinalLayer2D(nn.Module):
-    def __init__(self, hidden_size: int,
-                 patch_size: int,
-                 out_channels: int):
+    """Final projection layer for 2D DiT outputs."""
+    def __init__(
+        self,
+        hidden_size: int,
+        patch_size: int,
+        out_channels: int
+    ):
+        """
+        :param hidden_size:
+            Token embedding size.
+
+        :param patch_size:
+            Side length of square patch grid.
+
+        :param out_channels:
+            Number of output channels per pixel.
+        """
         super().__init__()
 
         # total_size = grid_size[0] * grid_size[1]
@@ -546,8 +996,21 @@ class DiTFinalLayer2D(nn.Module):
             nn.Linear(hidden_size, 2 * hidden_size, bias=True)
         )
 
-    def forward(self, x: torch.Tensor,
-                ctx: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        ctx: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        :param x:
+            Token tensor shape [B, N, hidden_size].
+
+        :param ctx:
+            Context tensor for modulation, shape [B, hidden_size].
+
+        :returns:
+            Projected output tensor of shape [B, N, out_channels].
+        """
         shift, scale = self.adaLN_modulation(ctx).chunk(2, dim=1)
 
         x = modulate(self.norm_final(x), shift, scale)

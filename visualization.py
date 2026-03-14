@@ -1,3 +1,6 @@
+"""Implementations of visualization helper functions
+"""
+
 import os
 import torch
 import shutil
@@ -15,12 +18,32 @@ from utils import warp
 from utils import grid_denormalizer
 
 
-def save_grid(deformation_grid: torch.Tensor,
-              path: str,
-              ax: plt.Axes=None,
-              color: str='#404040',
-              alpha: float=1.,
-              down_factor: int=1) -> None:
+def save_grid(
+    deformation_grid: torch.Tensor,
+    path: str,
+    ax: plt.Axes=None,
+    color: str='#404040',
+    alpha: float=1.,
+    down_factor: int=1
+) -> None:
+    """Saves the 2D/3D normalized deformation grid.
+
+    :param path:
+        complete/path/to/file.png
+    
+    :param ax:
+        An instance of matplotlib ax.
+        Used for overlaying the grid on exisiting figures.
+
+    :param color:
+        The hex color code for grid color.
+
+    :param alpha:
+        The opacity of the grid.
+
+    :param down_factor:
+        Down scaling factor for better visualization.
+    """
     if len(deformation_grid.size()) == 4:
         xy = deformation_grid[0].detach().cpu().numpy()
     else:
@@ -51,10 +74,29 @@ def save_grid(deformation_grid: torch.Tensor,
         ax.set_frame_on(False)
         ax.autoscale()
 
-def save_image(image: torch.Tensor,
-               path: str,
-               ax: plt.Axes=None,
-               cmap: str='gray') -> None:
+def save_image(
+    image: torch.Tensor,
+    path: str,
+    ax: plt.Axes=None,
+    cmap: str='gray'
+) -> None:
+    """Saves 2D/3D images. For 3D images its saves the
+    middle slice along the y-axis.
+
+    :param image:
+        The 2D/3D image.
+        Acceptable shapes: [1, 1, D, H, W] or [1, 1, H, W]
+    
+    :param path:
+        complete/path/to/file.png
+
+    :param ax:
+        An instance of matplotlib ax.
+        Used for overlaying the image on exisiting figures.
+    
+    :param cmap:
+        The color map used to display the image.
+    """
     if len(image.size()) == 4:
         image = image[0, 0].detach().cpu().numpy()
     else:
@@ -70,12 +112,34 @@ def save_image(image: torch.Tensor,
     else:
         ax.imshow(image, cmap=cmap)
     
-def save_mask(image: torch.Tensor,
-              path: str,
-              ax: plt.Axes=None,
-              alpha: float=1.,
-              num_classes: int=35) -> None:
+def save_mask(
+    image: torch.Tensor,
+    path: str,
+    ax: plt.Axes=None,
+    alpha: float=1.,
+    num_classes: int=35
+) -> None:
+    """Saves the 2D/3D segmentation masks. For 3D masks
+    it saves the middle slice along the y-axis.
 
+    :param image:
+        The 2D/3D segmentation mask.
+        Acceptable shapes: [1, 1, D, H, W] or [1, 1, H, W]
+    
+    :param path:
+        complete/path/to/file.png
+
+    :param ax:
+        An instance of matplotlib ax.
+        Used for overlaying the image on exisiting figures.
+    
+    :param alpha:
+        The opacity of the mask.
+
+    :param num_classes:
+        The number of distinct labels in the mask.
+        Useful for color coding.
+    """
     pallete = [(0, 0, 0)] + sns.color_palette('Paired', n_colors=num_classes)
     cmap = ListedColormap(pallete)
 
@@ -94,11 +158,34 @@ def save_mask(image: torch.Tensor,
     else:
         ax.imshow(image, cmap=cmap, interpolation='nearest', alpha=alpha)
 
-def save_vector_field(deformation_grid: torch.Tensor,
-                      path: str,
-                      moving_keypoints: torch.Tensor,
-                      id_grid: torch.Tensor,
-                      ax: plt.Axes=None) -> None:
+def save_vector_field(
+    deformation_grid: torch.Tensor,
+    path: str,
+    moving_keypoints: torch.Tensor,
+    id_grid: torch.Tensor,
+    ax: plt.Axes=None
+) -> None:
+    """Saves the 3D displacement field (used only for the LungCT dataset)
+    It saves the middle slice along the y-axis.
+
+    :param deformation_grid:
+        The 3D deformation grid with shape [1, D, H, W, 3]
+
+    :param path:
+        complete/path/to/file.png
+
+    :param moving_keypoints:
+        The coordinates of the keyponits the vectors start from.
+        Acceptable shape: [1, N, 3]
+    
+    :param id_grid:
+        An instance of an identity grid with the same
+        shape as the deformation grid.
+
+    :param ax:
+        An instance of matplotlib ax.
+        Used for overlaying the vector field on exisiting figures.
+    """
     _, d, h, w, _ = deformation_grid.shape
 
     # De-normalize the deformation grid
@@ -141,14 +228,43 @@ def save_vector_field(deformation_grid: torch.Tensor,
                   displacement_field[0, :, 0].cpu(),
                   displacement_field[0, :, 2].cpu())
     
-def save_grid_overlayed_image(image: torch.Tensor,
-                              deformation_grid: torch.Tensor,
-                              path: str,
-                              ax: plt.Axes=None,
-                              grid_color: str='#F80101',
-                              grid_alpha: float=0.6,
-                              grid_downfactor: int=2,
-                              cmap: str='bone') -> None:
+def save_grid_overlayed_image(
+    image: torch.Tensor,
+    deformation_grid: torch.Tensor,
+    path: str,
+    ax: plt.Axes=None,
+    grid_color: str='#F80101',
+    grid_alpha: float=0.6,
+    grid_downfactor: int=2,
+    cmap: str='bone'
+) -> None:
+    """Saves a 2D/3D warped image with the deformation grid overlaid on it.
+    For 3D images it saves the middle slice along the y-axis.
+
+    :param image:
+        The warped image.
+        Acceptable shapes: [1, 1, D, H, W] or [1, 1, H, W].
+
+    :param deformation_grid:
+        The [-1, 1] normalized grid used for warping the image.
+        Shape: [1, D, H, W, 3] or [1, H, W, 2].
+
+    :param path:
+        complete/path/to/file.png
+    
+    :param grid_color:
+        The color of the deformation grid.
+
+    :param grid_alpha:
+        The opacity of the deformation grid.
+
+    :param grid_downfactor:
+        The down sampling rate for the deformation grid
+        for visualization purposes.
+    
+    :param cmap:
+        The color map for displaying the image.
+    """
     # denormalize the grid
     denormalized_grid = grid_denormalizer(deformation_grid)
     if ax is None:
@@ -169,17 +285,43 @@ def save_grid_overlayed_image(image: torch.Tensor,
                   down_factor=grid_downfactor)
         ax.imshow(image, cmap=cmap)
 
-def animate_warping(network: torch.nn.Module,
-                    fixed_img: torch.Tensor,
-                    moving_img: torch.Tensor, 
-                    id_grid: torch.Tensor,
-                    down_factor: int,
-                    save_path: str,
-                    num_frames: int=100,
-                    overlay_grid: bool=False,
-                    cmap: str='bone') -> None:
+def animate_warping(
+    network: torch.nn.Module,
+    fixed_img: torch.Tensor,
+    moving_img: torch.Tensor, 
+    id_grid: torch.Tensor,
+    down_factor: int,
+    save_path: str,
+    num_frames: int=100,
+    overlay_grid: bool=False,
+    cmap: str='bone'
+) -> None:
+    """Animates the warping trajectory of SGDIR.
 
+    :param network:
+        An instance of SGDIR network.
 
+    :param fixed_img:
+        The fixed image.
+
+    :param moving_img:
+        The moving image.
+
+    :param id_grid:
+        An instance of the identity grid used in the input of
+        SGDIR.
+
+    :param down_factor:
+        The down sampling rate of deformation grid used for
+        visualization purposes.
+    
+    :param overlay_grid:
+        If True, the animation includes the warping grid
+        overlaid on the image.
+
+    :param camp:
+        The color map used for displaying the image.
+    """
     tmp_dir = os.path.join(save_path, 'tmp')
     os.makedirs(tmp_dir, exist_ok=True)
     
@@ -253,12 +395,38 @@ def animate_warping(network: torch.nn.Module,
     plt.close()
     shutil.rmtree(tmp_dir)
 
-def flow_snapshots(network: torch.nn.Module,
-                   fixed_img: torch.Tensor,
-                   moving_img: torch.Tensor,
-                   id_grid: torch.Tensor,
-                   save_path: str,
-                   num_frames: int=7) -> None:
+def flow_snapshots(
+    network: torch.nn.Module,
+    fixed_img: torch.Tensor,
+    moving_img: torch.Tensor,
+    id_grid: torch.Tensor,
+    save_path: str,
+    num_frames: int=7
+) -> None:
+    """Saves the snapshots of warped images by SGDIR at
+    different time points in [0, 1].
+
+    :param network:
+        An instance of SGDIR.
+
+    :param fixed_img:
+        The fixed image.
+
+    :param moving_img:
+        The moving image.
+
+    :param id_grid:
+        An instance of the identity grid used in the input of
+        SGDIR.
+
+    :param save_path:
+        /path/to/directory/
+
+    :param num_frames:
+        The number of frames to save. The [0, 1] time interval
+        is divided into num_frames segments and warpings will be
+        saved at each segment.
+    """
     base_path = os.path.join(save_path, 'frames')
     os.makedirs(f'{save_path}/frames', exist_ok=True)
     

@@ -1,14 +1,36 @@
+"""Implementations of the helper and utility functions
+
+The codes for positional encodings are inspired by
+https://github.com/facebookresearch/DiT
+"""
+
 import torch
+from typing import Union
 
 import numpy as np
-import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
 
 
 def warp(image: torch.Tensor,
          deformation_grid: torch.Tensor,
          nearest: bool=False) -> torch.Tensor:
+    """Implements image warping by a deformation grid.
+
+    :param image: 
+        2D or 3D image
+        Acceptable shapes: [B, C, D, H, W], [B, C, H, W]
+    
+    :param deformation_grid:
+        2D or 3D [-1, 1] normalized deformation grid
+        Acceptade shapes: [B, D, H, W, 3], [B, H, W, 2]
+    
+    :param nearest:
+        Whether to use nearest neighbor interpolation.
+        Set to True for warping segmentation masks
+    
+    :returns:
+        The warped image by the deformation grid
+    """
 
     mode = 'nearest' if nearest else 'bilinear'
 
@@ -21,15 +43,15 @@ def warp(image: torch.Tensor,
     return warped
 
 def jacobian_determinant(deformation_grid: torch.Tensor) -> torch.Tensor:
-    """
-    Computes the determinant of the Jacobian numerically, given the deformed
-    output grid and returns the percentage of negative values
+    """Computes the percentage of voxels/pixels having non-positive
+    Jacobian determinant.
     
-    Args:
-        deformation_grid (torch.Tensor): [B, D, H, W, 3]
+    :param deformation_grid: 
+        2D or 3D [-1, 1] normalized deformation grid
+        Accepted shapes: [B, D, H, W, 3], [B, H, W, 2]
 
-    Returns:
-        torch.Tensor: the percentage of negative determinants
+    :returns:
+        The percentage of negative determinants
     """
     if len(deformation_grid.size()) == 4:
         dy = deformation_grid[:, 1:, :-1, :] - deformation_grid[:, :-1, :-1, :]
@@ -54,50 +76,28 @@ def jacobian_determinant(deformation_grid: torch.Tensor) -> torch.Tensor:
     
     return neg_dets_percentage
 
-def save_determinant_intensity(deformed_grid: torch.Tensor, save_path: str, prefix: str=None) -> None:
-    """
-    This function receives the deformation grid output by FlowNet3D and plots the
-    determinants of its Jacobian for better analysis.
-    
-    Args:
-        deformed_grid (torch.Tensor): the deformation grid output by FlowNet3D with shape [1, D, H, W, 3]
-        save_path (str): the directory where the plot is saved
-        prefix (str): a prefix to the file name that is to be saved
-    """
-    dy = deformed_grid[:, 1:, :-1, :-1, :] - deformed_grid[:, :-1, :-1, :-1, :]
-    dx = deformed_grid[:, :-1, 1:, :-1, :] - deformed_grid[:, :-1, :-1, :-1, :]
-    dz = deformed_grid[:, :-1, :-1, 1:, :] - deformed_grid[:, :-1, :-1, :-1, :]
+def dsc_score(seg_map1: torch.Tensor,
+              seg_map2: torch.Tensor,
+              bg: bool=False,
+              structured: bool=False) -> torch.Tensor:
+    """Receives the segmentation maps of two 2d or 3d images
+    and computes the dice score coefficient between the two maps.
 
-    det0 = dx[:, :, :, :, 0] * (dy[:, :, :, :, 1] * dz[:, :, :, :, 2] - dy[:, :, :, :, 2] * dz[:, :, :, :, 1])
-    det1 = dx[:, :, :, :, 1] * (dy[:, :, :, :, 0] * dz[:, :, :, :, 2] - dy [:, :, :,:, 2] * dz[:, :, :, :, 0])
-    det2 = dx[:, :, :, :, 2] * (dy[:, :, :, :, 0] * dz[:, :, :, :, 1] - dy [:, :, :,:, 1] * dz[:, :, :, :, 0])
+    :param seg_map1: 
+        [B, C, D, H, W] or [B, C, H, W]; first segmentation map
 
-    determinants = det0 - det1 + det2
-    
-    determinants[determinants >= 0] = 0
-    determinants = torch.abs(determinants)
-    
-    mid_size = determinants.size(2) // 2
-    for i in range(determinants.size(0)):
-        filename = f'det_{i}.png'
-        if prefix is not None:
-            filename = 'batch_' + prefix + '_' + filename
-        plt.imsave(f'{save_path}/{filename}', determinants[i, :, mid_size, :].cpu().numpy())
-        plt.close()
+    :param seg_map2:
+        [B, C, D, H, W] or [B, C, H, W], second segmentation map
 
-def dsc_score(seg_map1: torch.Tensor, seg_map2: torch.Tensor, bg: bool=False, structured: bool=False) -> torch.Tensor:
-    """
-    This function receives the segmentation maps of two 2d or 3d images and computes the dice score coefficient
-    between the two images.
+    :param bg:
+        Consideres background matches if set True. Default False
 
-    Args:
-        seg_map1 (torch.Tensor): [B, C, w, h, d] or [B, C, h, w], first segmentation map
-        seg_map2 (torch.Tensor): [B, C, w, h, d] or [B, C, h, w], first segmentation map
-        bg (bool) - Defaults to False: consideres background matches if set True
-        structured (bool) - Defaults to False: if True, the dice over each structure is calculated, otherwise the
-                                               volumetric dice is computed
-    Returns:
-        torch.Tensor: the dice score between the two images
+    :param structured:
+        If True, the dice over each structure is calculated,
+        otherwise the volumetric dice is computed. Defalut False
+
+    :returns:
+        The dice score between the two segmentation maps
     """
     if not structured:
         max_classes = max(torch.max(seg_map1), torch.max(seg_map2))
@@ -137,24 +137,44 @@ def dsc_score(seg_map1: torch.Tensor, seg_map2: torch.Tensor, bg: bool=False, st
     
     return dsc_score
 
-def rolling_dice(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, 
-                 fixed_seg: torch.Tensor, moving_seg: torch.Tensor, 
-                 grid: torch.Tensor, save_path: str, num_frames: int=100) -> None:
-    """
-    This functions receives an instance of the FlowNet3D, the fixed and moving images, the
-    fixed and moving segmentations masks, and computes the dice score along the trajectory of warping
-    (i.e., the dice score of warped images at each time step). The results are saved into a 
+def rolling_dice(network: torch.nn.Module,
+                 fixed_img: torch.Tensor,
+                 moving_img: torch.Tensor, 
+                 fixed_seg: torch.Tensor,
+                 moving_seg: torch.Tensor, 
+                 grid: torch.Tensor,
+                 save_path: str,
+                 num_frames: int=100) -> None:
+    """Receives an instance of the SGDIR, the fixed and moving images,
+    the fixed and moving segmentations masks, and computes the dice
+    score along the trajectory of warping (i.e., the dice score of warped
+    images at each time step). The results are saved into a
     fwd_rolling_dice.txt file
-    
-    Args:
-        network (torch.nn.Module): an instanc of the FlowNet3D
-        fixed_img (torch.Tensor): fixed image [1, 1, D, H, W]
-        moving_img (torch.Tensor): moving image [1, 1, D, H, W]
-        fixed_seg (torch.Tensor): fixed image segmentation mask [1, 1, D, H, W]
-        moving_seg (torch.Tensor): moving image segmentation mask [1, 1, D, H, W]
-        grid (torch.Tensor): the initial grid [1, D, H, W, 3]
-        save_path (str): the directory in which the results will be saved
-        num_frames (int) - Defaluts to 100: the number of time steps at which the dice score should be computed
+
+    :param network:
+        An instanc of the SGDIR.
+
+    :param fixed_img:
+        Fixed image [1, 1, D, H, W] or [1, 1, H, W].
+
+    :param moving_img:
+        Moving image [1, 1, D, H, W] or [1, 1, H, W].
+
+    :param fixed_seg:
+        Fixed image segmentation mask [1, 1, D, H, W] or [1, 1, H, W].
+
+    :param moving_seg:
+        Moving image segmentation mask [1, 1, D, H, W] or [1, 1, H, W].
+
+    :param grid:
+        The identty grid [1, D, H, W, 3] or [1, H, W, 2].
+
+    :param save_path:
+        The directory in which the results will be saved.
+
+    :param num_frames:
+        The number of time steps at which the dice score should be computed
+        Default 100.
     """    
     timesteps = torch.linspace(0, 1, num_frames)
 
@@ -185,43 +205,16 @@ def rolling_dice(network: torch.nn.Module, fixed_img: torch.Tensor, moving_img: 
     np.savetxt(f'{save_path}/fwd_rolling_dice.txt', f_dice_scores)
     np.savetxt(f'{save_path}/fwd_rolling_jacs.txt', f_jacs)
 
-def evaluate_semi_group_property(network: nn.Module, fixed_img: torch.Tensor, moving_img: torch.Tensor, grid: torch.Tensor, save_path: str):
-    """
-    This function receives the an instance of FlowNet3D along with the fixed and moving images and evaluates the percentage
-    negative Jacobian determinants and how well the semigroup property holds. 
-    The final results are saved into jacs.tx and errors.txt files which contain the information on Jacobian determinants
-    and the semigroup property errors, respectively.
-    
-    Args:
-        network (torch.nn.Module): an instanc of the FlowNet3D
-        fixed_img (torch.Tensor): fixed image [1, 1, D, H, W]
-        moving_img (torch.Tensor): moving image [1, 1, D, H, W]
-        grid (torch.Tensor): the initial grid [1, D, H, W, 3]
-        save_path (str): the directory in which the results will be saved
-    """
-    t = torch.rand(100, device=fixed_img.device) * 2. - 1.
-    s = torch.rand(100, device=fixed_img.device) * 2. - 1. - t
-    prop_errors = np.zeros((100, 100), dtype=np.float32)
-    jacs = np.zeros((100,), dtype=np.float32)
-    with torch.no_grad():
-        for i, t1 in enumerate(t):
-            t1 = t1.reshape(1)
-            flow_t = t1 * network.velocity(fixed_img, moving_img, t1)
-            grid_t = network.make_grid(flow_t, grid)
-            jacs[i] = jacobian_determinant(grid_t)
-            for j, t2 in enumerate(s):
-                t2 = t2.reshape(1)
-                flow_s = t2 * network.velocity(fixed_img, moving_img, t2)
-                composed_flow = network.compose(flow_t, flow_s, grid)
-                grid = network.make_grid(composed_flow, grid)
-                new_flow = (t1 + t2) * network.velocity(fixed_img, moving_img, t1 + t2)
-                new_grid = network.make_grid(new_flow, grid)
-                prop_errors[i, j] = torch.mean((grid - new_grid) ** 2).cpu().numpy()
-    
-    np.savetxt(f'{save_path}/errors.txt', prop_errors)
-    np.savetxt(f'{save_path}/jacs.txt', jacs)
-
 def grid_denormalizer(deformation_grid: torch.Tensor) -> torch.Tensor:
+    """Denormalizes a [-1, 1] normalized grid back to its original size
+
+    :param deformation_grid:
+        A 2D or 3D [-1, 1] normalized grid.
+        Accepted shapes: [B, D, H, W, 3] or [B, H, W, 2].
+    
+    :returns:
+        A denormalized 2D or 3D grid with the same shape as input.
+    """
     shape = deformation_grid.shape[1:-1][::-1]
     
     denormalized_grid = deformation_grid.clone()
@@ -231,11 +224,17 @@ def grid_denormalizer(deformation_grid: torch.Tensor) -> torch.Tensor:
     
     return denormalized_grid
 
-def get_3d_sincos_pos_embed(embed_dim, grid_size):
-    """
-    grid_size: int or tuple (D, H, W)
-    return:
-    pos_embed: [D*H*W, embed_dim]
+def get_3d_sincos_pos_embed(embed_dim: int, grid_size: Union[int, tuple[int, int, int]]) -> np.ndarray:
+    """Generates 3D sinusoidal positional embeddings.
+
+    :param embed_dim:
+        The embedding dimension.
+
+    :param grid_size:
+        The grid size, either an int or tuple (D, H, W).
+        
+    :returns:
+        The positional embeddings with shape [D*H*W, embed_dim].
     """
     if isinstance(grid_size, int):
         D = H = W = grid_size
@@ -256,11 +255,18 @@ def get_3d_sincos_pos_embed(embed_dim, grid_size):
 
     return pos_embed
 
-def get_2d_sincos_pos_embed(embed_dim, grid_size):
-    """
-    grid_size: int or tuple (H, W)
-    return:
-    pos_embed: [H*W, embed_dim]
+def get_2d_sincos_pos_embed(embed_dim: int,
+                            grid_size: Union[int, tuple[int, int]]) -> np.ndarray:
+    """Generates 2D sinusoidal positional embeddings.
+
+    :param embed_dim:
+        The embedding dimension.
+
+    :param grid_size:
+        The grid size, either an int or tuple (H, W).
+        
+    :returns:
+        The positional embeddings with shape [H*W, embed_dim].
     """
     if isinstance(grid_size, int):
         H = W = grid_size
@@ -280,10 +286,18 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size):
 
     return pos_embed
 
-def get_3d_sincos_pos_embed_from_grid(embed_dim, grid):
-    """
-    grid: [3, 1, D, H, W]
-    return: [D*H*W, embed_dim]
+def get_3d_sincos_pos_embed_from_grid(embed_dim: int,
+                                      grid: np.ndarray) -> np.ndarray:
+    """Generates 3D sinusoidal positional embeddings from a given grid.
+
+    :param embed_dim:
+        The embedding dimension.
+
+    :param grid:
+        The position grid with shape [3, 1, D, H, W].
+        
+    :returns:
+        The positional embeddings with shape [D*H*W, embed_dim].
     """
     assert embed_dim % 3 == 0, "Embed dimension must be divisible by 3 for 3D sin-cos embedding"
 
@@ -297,10 +311,18 @@ def get_3d_sincos_pos_embed_from_grid(embed_dim, grid):
     emb = np.concatenate([emb_d, emb_h, emb_w], axis=1)  # (D*H*W, D)
     return emb
 
-def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    """
-    grid: [2, 1, H, W]
-    return: [H*W, embed_dim]
+def get_2d_sincos_pos_embed_from_grid(embed_dim: int,
+                                      grid: np.ndarray) -> np.ndarray:
+    """Generates 2D sinusoidal positional embeddings from a given grid.
+
+    :param embed_dim:
+        The embedding dimension.
+
+    :param grid:
+        The position grid with shape [2, 1, H, W].
+        
+    :returns:
+        The positional embeddings with shape [H*W, embed_dim].
     """
     assert embed_dim % 2 == 0, "Embed dimension must be divisible by 2 for 3D sin-cos embedding"
 
@@ -313,11 +335,18 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
     return emb
 
-def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-    """
-    embed_dim: output dimension for each position
-    pos: position grid (any shape)
-    return: [pos_size, embed_dim]
+def get_1d_sincos_pos_embed_from_grid(embed_dim: int,
+                                      pos: np.ndarray) -> np.ndarray:
+    """Generates 1D sinusoidal positional embeddings from positions.
+
+    :param embed_dim:
+        The output dimension for each position.
+
+    :param pos:
+        The position grid of any shape.
+        
+    :returns:
+        The positional embeddings with shape [pos_size, embed_dim].
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float32)
