@@ -32,8 +32,8 @@ training:
   lr: 1e-4
   epochs: 500
   eval_interval: 1
-  checkpoints_path: 'checkpoints/acdc_dit.pt'
-  logdir: 'logs/acdc/acdc_dit.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/acdc/'
 
 # loss factors
 loss:
@@ -44,5 +44,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/acdc/acdc_dit'
-  logdir: 'logs/acdc/acdc_dit_eval.log'
+  save_evals_path: 'evals/acdc/'
+  logdir: 'logs/acdc/'

@@ -33,8 +33,8 @@ training:
   lr: 1e-4
   epochs: 1000
   eval_interval: 1
-  checkpoints_path: 'checkpoints/abdomen_dit2.pt'
-  logdir: 'logs/abdomen/abdomen_dit2.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/abdomen/'
 
 # loss factors
 loss:
@@ -45,5 +45,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/abdomen/abdomen_dit2'
-  logdir: 'logs/abdomen/abdomen_dit2_eval.log'
+  save_evals_path: 'evals/abdomen/'
+  logdir: 'logs/abdomen/'

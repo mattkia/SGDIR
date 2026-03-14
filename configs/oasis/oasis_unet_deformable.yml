@@ -27,8 +27,8 @@ training:
   lr: 1e-4
   epochs: 1000
   eval_interval: 1
-  checkpoints_path: 'checkpoints/oasis_single2.pt'
-  logdir: 'logs/oasis/oasis_single2.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/oasis/'
 
 # loss factors
 loss:
@@ -39,5 +39,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/oasis/oasis_single2'
-  logdir: 'logs/oasis/oasis_single2_eval.log'
+  save_evals_path: 'evals/oasis/'
+  logdir: 'logs/oasis/'

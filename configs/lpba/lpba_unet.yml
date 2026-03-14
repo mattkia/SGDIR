@@ -27,8 +27,8 @@ training:
   lr: 1e-4
   epochs: 500
   eval_interval: 1
-  checkpoints_path: 'checkpoints/lpba.pt'
-  logdir: 'logs/lpba40/lpba.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/lpba40/'
 
 # loss factors
 loss:
@@ -39,5 +39,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/lpba40/lpba'
-  logdir: 'logs/lpba40/lpba_eval.log'
+  save_evals_path: 'evals/lpba40/'
+  logdir: 'logs/lpba40/'

@@ -27,8 +27,8 @@ training:
   lr: 1e-4
   epochs: 400
   eval_interval: 1
-  checkpoints_path: 'checkpoints/lungct2.pt'
-  logdir: 'logs/lungct/lungct2.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/lungct/'
 
 # loss factors
 loss:
@@ -39,5 +39,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/lungct/lungct2'
-  logdir: 'logs/lungct/lungct2_eval.log'
+  save_evals_path: 'evals/lungct/'
+  logdir: 'logs/lungct/'

@@ -27,8 +27,8 @@ training:
   lr: 1e-4
   epochs: 1000
   eval_interval: 1
-  checkpoints_path: 'checkpoints/ixi.pt'
-  logdir: 'logs/ixi/ixi.log'
+  checkpoints_path: 'checkpoints/'
+  logdir: 'logs/ixi/'
 
 # loss factors
 loss:
@@ -39,5 +39,5 @@ loss:
 test:
   down_factor: 2
   save_evals: true
-  save_evals_path: 'evals/ixi/ixi_unet'
-  logdir: 'logs/ixi/ixi_eval.log'
+  save_evals_path: 'evals/ixi/'
+  logdir: 'logs/ixi/'
