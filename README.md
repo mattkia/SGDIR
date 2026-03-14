@@ -1,4 +1,4 @@
-# Nerfies
+# SGDIR
 
 This is the repository that contains source code for the [SGDIR website](https://mattkia.github.io/SGDIR).
 
