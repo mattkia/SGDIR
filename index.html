@@ -152,7 +152,8 @@
   </div>
 </section>
 
-<section class="hero teaser">
+<!-- TODO: ADD Deformation gifs here -->
+<!-- <section class="hero teaser">
   <div class="container is-max-desktop">
     <div class="hero-body">
       <video id="teaser" autoplay muted loop playsinline height="100%">
@@ -166,10 +167,10 @@
       </h2>
     </div>
   </div>
-</section>
+</section> -->
 
-
-<section class="hero is-light is-small">
+<!-- TODO: ADD deformation gifs here -->
+<!-- <section class="hero is-light is-small">
   <div class="hero-body">
     <div class="container">
       <div id="results-carousel" class="carousel results-carousel">
@@ -224,7 +225,7 @@
       </div>
     </div>
   </div>
-</section>
+</section> -->
 
 
 <section class="section">
@@ -235,31 +236,19 @@
         <h2 class="title is-3">Abstract</h2>
         <div class="content has-text-justified">
           <p>
-            We present the first method capable of photorealistically reconstructing a non-rigidly
-            deforming scene using photos/videos captured casually from mobile phones.
-          </p>
-          <p>
-            Our approach augments neural radiance fields
-            (NeRF) by optimizing an
-            additional continuous volumetric deformation field that warps each observed point into a
-            canonical 5D NeRF.
-            We observe that these NeRF-like deformation fields are prone to local minima, and
-            propose a coarse-to-fine optimization method for coordinate-based models that allows for
-            more robust optimization.
-            By adapting principles from geometry processing and physical simulation to NeRF-like
-            models, we propose an elastic regularization of the deformation field that further
-            improves robustness.
-          </p>
-          <p>
-            We show that <span class="dnerf">Nerfies</span> can turn casually captured selfie
-            photos/videos into deformable NeRF
-            models that allow for photorealistic renderings of the subject from arbitrary
-            viewpoints, which we dub <i>"nerfies"</i>. We evaluate our method by collecting data
-            using a
-            rig with two mobile phones that take time-synchronized photos, yielding train/validation
-            images of the same pose at different viewpoints. We show that our method faithfully
-            reconstructs non-rigidly deforming scenes and reproduces unseen views with high
-            fidelity.
+            Diffeomorphic image registration (DIR) seeks topology-preserving transformations and is fundamental 
+            in medical imaging. Existing DIR methods rely on integration schemes (e.g., scaling-and-squaring) 
+            and multiple regularizers to enforce invertibility. We introduce \textbf{SGDIR}, a continuous-time 
+            registration framework, parameterized by known time-embedded backbones, that models diffeomorphisms 
+            using only a single semigroup-based regularization, eliminating explicit integration and auxiliary 
+            constraints. We mathematically prove that this formulation directly learns the flow of an underlying ODE, 
+            inherently enforcing inverse and cycle consistencies. We evaluate on eight 2D and 3D MR and CT datasets. 
+            Under strict semigroup enforcement, our model achieves near-perfect diffeomorphism and significantly outperforms 
+            existing diffeomorphic methods, while remaining competitive with leading non-diffeomorphic deformable models. 
+            When the regularization is relaxed, the same architecture functions as a deformable method and substantially 
+            surpasses state-of-the-art non-diffeomorphic approaches in registration accuracy. These results demonstrate 
+            that continuous-time deformation modeling, guided solely by our semigroup-based regularization, yields a unified 
+            framework capable of both rigorously diffeomorphic mapping and state-of-the-art deformable registration.
           </p>
         </div>
       </div>
