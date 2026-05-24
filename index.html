@@ -37,6 +37,20 @@
   <script src="./static/js/bulma-carousel.min.js"></script>
   <script src="./static/js/bulma-slider.min.js"></script>
   <script src="./static/js/index.js"></script>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    };
+  </script>
+
+  <script
+    id="MathJax-script"
+    async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
 </head>
 <body>
 
@@ -50,16 +64,16 @@
   </div>
   <div class="navbar-menu">
     <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
-      <a class="navbar-item" href="https://keunhong.com">
+      <a class="navbar-item" href="">
       <span class="icon">
           <i class="fas fa-home"></i>
       </span>
       </a>
 
       <div class="navbar-item has-dropdown is-hoverable">
-        <a class="navbar-link">
+        <!-- <a class="navbar-link">
           More Research
-        </a>
+        </a> -->
         <!-- <div class="navbar-dropdown">
           <a class="navbar-item" href="https://hypernerf.github.io">
             HyperNeRF
@@ -86,8 +100,13 @@
     <div class="container is-max-desktop">
       <div class="columns is-centered">
         <div class="column has-text-centered">
-          <h1 class="title is-1 publication-title">Learning Diffeomorphism for Medical Image Registration with Time-Embedded Architectures Using Semigroup Regularization</h1>
+          <h1 class="title is-1 publication-title"><span style="color: #208080;">SGDIR</span>: <span style="color: #208080;">S</span>emi<span style="color: #208080;">G</span>roup
+            <span style="color: #208080;">D</span>iffeomorphic <span style="color: #208080;">I</span>mage <span style="color: #208080;">R</span>egistration</h1>
+          <div class="is-size-5">
+            <p>Learning Diffeomorphism for Medical Image Registration with Time-Embedded Architectures Using Semigroup Regularization</p>
+          </div></br>
           <div class="is-size-5 publication-authors">
+            <p>CVPR 2026 (Oral), 🏆 Award Candidate</p>
             <span class="author-block">
               <a href="">Mohammadjavad Matinkia</a>,
             </span>
@@ -168,6 +187,45 @@
     </div>
   </div>
 </section> -->
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <div class="triple-image-row">
+        <div class="image-block">
+          <img
+            src="./static/images/oasis/oasis_moving.png"
+            alt="Moving"
+            class="triple-image"
+          >
+          <p class="image-caption">Source</p>
+        </div>
+
+        <div class="image-block">
+          <img
+            src="./static/images/gifs/oasis-forward.gif"
+            alt="Warped"
+            class="triple-image"
+          >
+          <p class="image-caption">Warped</p>
+        </div>
+
+        <div class="image-block">
+          <img
+            src="./static/images/oasis/oasis_fixed.png"
+            alt="Fixed"
+            class="triple-image"
+          >
+          <p class="image-caption">Target</p>
+        </div>
+
+      </div>
+      <h2 class="subtitle has-text-centered">
+        <span class="dnerf">SGDIR</span> Learns a continuous-time trajectory warping the moving
+        image towards the fixed image
+      </h2>
+    </div>
+  </div>
+</section>
 
 <!-- TODO: ADD deformation gifs here -->
 <!-- <section class="hero is-light is-small">
@@ -238,7 +296,7 @@
           <p>
             Diffeomorphic image registration (DIR) seeks topology-preserving transformations and is fundamental 
             in medical imaging. Existing DIR methods rely on integration schemes (e.g., scaling-and-squaring) 
-            and multiple regularizers to enforce invertibility. We introduce \textbf{SGDIR}, a continuous-time 
+            and multiple regularizers to enforce invertibility. We introduce <b>SGDIR</b>, a continuous-time 
             registration framework, parameterized by known time-embedded backbones, that models diffeomorphisms 
             using only a single semigroup-based regularization, eliminating explicit integration and auxiliary 
             constraints. We mathematically prove that this formulation directly learns the flow of an underlying ODE, 
@@ -256,18 +314,434 @@
     <!--/ Abstract. -->
 
     <!-- Paper video. -->
-    <!-- <div class="columns is-centered has-text-centered">
+    <div class="columns is-centered has-text-centered">
       <div class="column is-four-fifths">
-        <h2 class="title is-3">Video</h2>
+        <h2 class="title is-3">Presentation Video</h2>
         <div class="publication-video">
-          <iframe src="https://www.youtube.com/embed/MrKrnHhk8IA?rel=0&amp;showinfo=0"
+          <iframe src="https://www.youtube.com/embed/ss_GC9hi-7k?rel=0&amp;showinfo=0"
                   frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
         </div>
-      </div> -->
+      </div>
     </div>
     <!--/ Paper video. -->
   </div>
 </section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">SGDIR in a Nutshell</h2>
+        <div class="content">
+          <ul>
+            <li>SGDIR is a registration framework; it is architecture-agnostic as long as the architecture supports time injection and is appropriately designed for image registration</li>
+            <li>SGDIR has only one regularization term (partial semigroup regularization) controled by a factor $\lambda$; A high value of $\lambda$ ($\approx 10^5$) is suitable
+              for fully diffeomorphic settings, while a slightly lower value ($\approx 10^4$) is a good choice for deformable settings where diffeomorphism carries less importance
+              than alignment accuracy.</li>
+          </ul>
+
+          <figure class="image is-centered mt-5">
+            <img src="static/images/sgdir-scheme.png" alt="SGDIR scheme figure" style="width: 70%; height: auto;">
+          </figure>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">SGDIR Methodology</h2>
+        To model a diffeomorphism $\phi$ warping a moving image $I_m$ to a fixed image $I_f$, SGDIR learns the solution of a stationary ODE
+        <p>
+          $$
+          \begin{cases}
+          \frac{d\phi_t}{dt} &= v(\phi_t) \\
+          \phi_0 &= \mathrm{id}
+          \end{cases}
+          $$
+        </p>
+        <p>
+          SGDIR takes the dynamical systems perspective of the ODE solutions:
+        </p>
+        <p>
+          $$
+          \phi_0 = \mathrm{Id},\quad\underbrace{\phi_s\circ\phi_t=\phi_{s+t}}_\text{Semigroup Property} \iff \begin{cases}\frac{d\phi_t}{dt} &= v(\phi_t) \\\phi_0 &= \mathrm{id}\end{cases}\quad\text{(for some velocity field }v\text{)}
+          $$
+        </p>
+        <p>
+          Unlike conventional diffeomorphic registration methods, which model the velocity field $v(.)$
+          and solve the ODE using well-known methods such as scaling-and-squaring, SGDIR directly models
+          the flow map solution of the ODE and learns the diffeomorphism <b>without velocity parameterization</b>,
+          <b>without any integration during training and inference</b>, and <b>withour multiple regularization terms</b>.
+        </p>
+        <p>
+          To this end, SGDIR introduces a <i>partial Semigroup regularization</i> as the only regularization term and employs
+          a time-dependent loss function, which provably drives the model towards, learning the ODE solution, hence inheriting
+          their smoothness and diffeomorphic properties.
+        </p>
+
+        <figure class="image is-centered mt-5">
+          <img src="static/images/sgdir-concept.png" alt="SGDIR concept figure">
+        </figure></br>
+
+        <p>
+          Importantly, we show that the full semigroup regularization is deducible from the partial semigroup regularization.
+          Practically, we don't need independent time poinst $s$ and $t$ to impose the full semigroup; rather, only using time
+          points $t-1$ and $t$ suffices for a guaranteed learning of the ODE solution:
+        </p>
+
+        <p>
+          $$
+            \underbrace{\phi_{t-1}\circ\phi_t=\phi_{2t-1}}_\text{Partial Semigroup Property} \implies \underbrace{\phi_s\circ\phi_t=\phi_{s+t}}_\text{Full Semigroup Property}
+          $$
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Results Summary</h2>
+
+        <h3 class="title is-4">Continuous-Time Deformation</h3>
+        <div class="content has-text-justified">
+          <p>
+            SGDIR learns the diffeomorphism trajectory $\phi_t$ at any timestep $t$ enabling a continuous deformation of the image.
+            Thanks to its formulation, SGDIR can infer the warped image $I_t := I\circ\phi_t$ instantly without doing any integration.
+          </p>
+        </div>
+
+        <div class="columns is-vcentered interpolation-panel">
+          <div class="column is-3 has-text-centered">
+            <img src="./static/images/oasis/oasis_moving.png"
+                 class="interpolation-image"
+                 alt="Interpolate start reference image."/>
+            <p>Source Image</p>
+          </div>
+          <div class="column interpolation-video-column">
+            <div id="interpolation-image-wrapper">
+              Loading...
+            </div>
+            <input class="slider is-fullwidth is-large is-info"
+                   id="interpolation-slider"
+                   step="1" min="0" max="100" value="0" type="range">
+          </div>
+          <div class="column is-3 has-text-centered">
+            <img src="./static/images/oasis/oasis_fixed.png"
+                 class="interpolation-image"
+                 alt="Interpolation end reference image."/>
+            <p class="is-bold">Target Image</p>
+          </div>
+        </div>
+        
+        <div class="column is-full-width">
+        <div class="content">
+          <ul>
+            <li>SGDIR is evaluated on 8 2D/3D datasets: OASIS, IXI, LPBA40, Mindboggle101, CANDI, LungCT, AbdomenCTCT, and ACDC</li>
+            <li>SGDIR is compared with more than 15 strong baselines including GradICON, NODEO, NePhi, TransMorph, TransMatch, DiffuseReg, HViT, CorrMLP, SACB-Net, etc.</li>
+          </ul>
+        </div>
+        <figure class="image is-centered mt-5">
+          <img src="static/images/sgdir-results.png" alt="SGDIR results figure">
+        </figure></br>
+        
+        <div style="overflow-x: auto">
+          <table class="booktabs">
+            <thead>
+              <!-- <tr>
+                <th colspan="4" style="text-align: center;">OASIS</th>
+              </tr> -->
+              <tr>
+                <th rowspan="2" style="vertical-align: middle;">Method</th>
+                <th colspan="2", style="text-align: center;">OASIS</th>
+                <th colspan="2", style="text-align: center;">IXI</th>
+                <th colspan="2", style="text-align: center;">LPBA40</th>
+                <th colspan="2", style="text-align: center;">Mindboggle101</th>
+                <th colspan="2", style="text-align: center;">CANDI</th>
+              </tr>
+              <tr>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+              </tr>
+            </thead>
+  
+            <tbody>
+              <tr>
+                <td>TransMorph-diff</td>
+                <td>83.51</td>
+                <td>0.0066</td>
+                <td>75.98</td>
+                <td>0.0142</td>
+                <td>70.98</td>
+                <td>0.0086</td>
+                <td>69.45</td>
+                <td>0.0364</td>
+                <td>83.20</td>
+                <td>0.0026</td>
+              </tr>
+  
+              <tr>
+                <td>GradICON</td>
+                <td>83.89</td>
+                <td>0.0039</td>
+                <td>76.43</td>
+                <td>0.0018</td>
+                <td>72.21</td>
+                <td>0.0011</td>
+                <td>70.78</td>
+                <td>0.0117</td>
+                <td>83.29</td>
+                <td>0.0015</td>
+              </tr>
+
+              <tr>
+                <td>HViT</td>
+                <td>85.07</td>
+                <td>0.4812</td>
+                <td>80.67</td>
+                <td>0.5933</td>
+                <td>76.57</td>
+                <td>0.4428</td>
+                <td>71.80</td>
+                <td>1.4051</td>
+                <td>84.67</td>
+                <td>0.1368</td>
+              </tr>
+
+              <tr>
+                <td>CorrMLP</td>
+                <td>84.66</td>
+                <td>0.4640</td>
+                <td>77.54</td>
+                <td>0.3675</td>
+                <td>75.72</td>
+                <td>0.0145</td>
+                <td>71.92</td>
+                <td>0.1895</td>
+                <td>81.96</td>
+                <td>0.0098</td>
+              </tr>
+  
+              <tr>
+                <td><b><span style="color: #208080;">SGDIR $(\lambda=10^5)$</b></td>
+                <td><b>85.90</b></td>
+                <td><b>0.0003</b></td>
+                <td><b>80.18</b></td>
+                <td><b>0.0</b></td>
+                <td><b>77.13</b></td>
+                <td><b>0.0</b></td>
+                <td><b>71.58</b></td>
+                <td><b>0.0004</b></td>
+                <td><b>84.50</b></td>
+                <td><b>0.0003</b></td>
+              </tr>
+
+              <tr>
+                <td><b><span style="color: #208080;">SGDIR $(\lambda=10^4)$</b></td>
+                <td><b>87.82</b></td>
+                <td>0.3982</td>
+                <td><b>83.88</b></td>
+                <td>0.6036</td>
+                <td><b>78.93</b></td>
+                <td>0.1821</td>
+                <td><b>73.59</b></td>
+                <td>0.6512</td>
+                <td><b>85.51</b></td>
+                <td>0.0473</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="image is-centered mt-5">
+          <img src="static/images/ixi-results.png" alt="IXI results figure">
+          <figcaption class="mt-2" style="text-align: center;">
+            Sample results and comparison on the IXI dataset. <b>FP</b> stands for folding percentage and is the same metric as $|J_\phi|_{<0}\%$
+          </figcaption>
+        </figure></br>
+
+        <div class="columns is-variable is-6 is-vcentered">
+
+          <!-- LEFT HALF : IMAGE -->
+          <div class="column is-half">
+
+            <figure>
+              <img
+                src="static/images/lungct-results.png"
+                alt="LungCT results figure"
+                style="
+                  width: 100%;
+                  height: auto;
+                  display: block;
+                  margin-left: auto;
+                  margin-right: auto;
+                ">
+
+              <figcaption class="mt-2" style="text-align: center;">
+                Sample results and comparison on the LungCT dataset.
+              </figcaption>
+            </figure>
+
+          </div>
+
+          <!-- RIGHT HALF : STACKED TABLES -->
+          <div class="column is-half">
+
+            <!-- TABLE 1 -->
+            <div style="overflow-x: auto; margin-bottom: 2rem;">
+              <table class="booktabs">
+                <thead>
+                  <tr>
+                    <th rowspan="2" style="vertical-align: middle;">Method</th>
+                    <th colspan="2" style="text-align: center;">LungCT</th>
+                  </tr>
+
+                  <tr>
+                    <th style="text-align: center;">
+                      $\text{TRE} \downarrow$
+                    </th>
+
+                    <th>
+                      $|J_\phi|_{<0}\% \downarrow$
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>GradICON</td>
+                    <td>2.64</td>
+                    <td>0.0009</td>
+                  </tr>
+
+                  <tr>
+                    <td>SACB-Net</td>
+                    <td>3.01</td>
+                    <td>0.9824</td>
+                  </tr>
+
+                  <tr>
+                    <td><b><span style="color: #208080;">SGDIR $(\lambda = 10^5)$</span></b></td>
+                    <td><b>2.37</b></td>
+                    <td><b>0.0</b></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- TABLE 2 -->
+            <div style="overflow-x: auto;">
+              <table class="booktabs">
+                <thead>
+                  <tr>
+                    <th rowspan="2" style="vertical-align: middle;">Method</th>
+                    <th colspan="2" style="text-align: center;">AbdomenCTCT</th>
+                  </tr>
+
+                  <tr>
+                    <th style="text-align: center;">
+                      $\text{DSC} \uparrow$
+                    </th>
+
+                    <th>
+                      $|J_\phi|_{<0}\% \downarrow$
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>NePhi</td>
+                    <td>45.32</td>
+                    <td>0.0008</td>
+                  </tr>
+
+                  <tr>
+                    <td>SACB-Net</td>
+                    <td>53.38</td>
+                    <td>0.9348</td>
+                  </tr>
+
+                  <tr>
+                    <td><b><span style="color: #208080;">SGDIR $(\lambda=10^5)$</span></b></td>
+                    <td><b>53.64</b></td>
+                    <td><b>0.0</b></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div style="overflow-x: auto">
+          <table class="booktabs">
+            <thead>
+              <!-- <tr>
+                <th colspan="4" style="text-align: center;">OASIS</th>
+              </tr> -->
+              <tr>
+                <th rowspan="2" style="vertical-align: middle;">Method</th>
+                <th colspan="2", style="text-align: center;">ACDC</th>
+              </tr>
+              <tr>
+                <th style="text-align: center;">$\text{DSC} \uparrow$</th>
+                <th>$|J_\phi|_{<0}\% \downarrow$</th>
+              </tr>
+            </thead>
+  
+            <tbody>
+              <tr>
+                <td>DiffuseReg</td>
+                <td>83.31</td>
+                <td>0.2345</td>
+              </tr>
+  
+              <tr>
+                <td>AdaCS</td>
+                <td>85.46</td>
+                <td>0.1493</td>
+              </tr>
+  
+              <tr>
+                <td><b><span style="color: #208080;">SGDIR $(\lambda = 10^5)$</span></b></td>
+                <td><b>85.79</b></td>
+                <td><b>0.0</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="image is-centered mt-5">
+          <img src="static/images/acdc-results.png" alt="ACDC results figure">
+          <figcaption class="mt-2" style="text-align: center;">
+            Sample results and comparison on the ACDC dataset.
+          </figcaption>
+        </figure></br>
+      </div>
+    </div>
+  </div>
+</section>
+
 
 <!-- TODO: Fill with properly related results -->
 <!-- <section class="section">
@@ -407,17 +881,18 @@
 </section> -->
 
 
-<!-- <section class="section" id="BibTeX">
+<section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
     <h2 class="title">BibTeX</h2>
-    <pre><code>@article{park2021nerfies,
+    <p>TBD</p>
+    <!-- <pre><code>@article{park2021nerfies,
   author    = {Park, Keunhong and Sinha, Utkarsh and Barron, Jonathan T. and Bouaziz, Sofien and Goldman, Dan B and Seitz, Steven M. and Martin-Brualla, Ricardo},
   title     = {Nerfies: Deformable Neural Radiance Fields},
   journal   = {ICCV},
   year      = {2021},
-}</code></pre>
+}</code></pre> -->
   </div>
-</section> -->
+</section>
 
 <footer class="footer">
   <div class="container">
