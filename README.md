@@ -8,7 +8,7 @@
 <p align="center">
   <img src="assets/arch.png" width="100%"/>
 </p>
-This is the official repository of the SGDIR paper.
+This is the official repository of the SGDIR paper published at CVPR 2026.
 
 ## Installing the dependencies
 This package is written in Python 3.10. To install the dependencies, run the following command
@@ -128,4 +128,17 @@ python train.py -c oasis | candi | lpba | ixi
 * To evaluate the model run the following:
 ```
 python eval.py -c oasis | candi | lpba | ixi
+```
+
+## Bibtex
+If you find SGDIR useful for your work please cite:
+```
+@InProceedings{Matinkia_2026_CVPR,
+    author    = {Matinkia, Mohammadjavad and Ray, Nilanjan},
+    title     = {Learning Diffeomorphism for Medical Image Registration with Time-Embedded Architectures Using Semigroup Regularization},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2026},
+    pages     = {28775-28785}
+}
 ```
